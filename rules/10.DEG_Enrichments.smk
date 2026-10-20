@@ -1,3 +1,5 @@
+import json
+
 #!/usr/bin/snakemake
 # -*- coding: utf-8 -*-
 """
@@ -240,6 +242,11 @@ rule Enrichments:
     """
     input:
         DEG_info = "06.DEG/DESEQ2/All_Contrast_DEG_Statistics.csv",
+        kegg_id_map = lambda wildcards: (
+            [config['deg_enrich_wrapper'][config['Genome_Version']]['kegg']['id_map']]
+            if config['deg_enrich_wrapper'][config['Genome_Version']].get('kegg', {}).get('enabled', False)
+            and config['deg_enrich_wrapper'][config['Genome_Version']]['kegg'].get('id_map') else []
+        ),
     output:
         Enrichments_dir = directory("07.Enrichments/"),
     resources:
@@ -256,9 +263,15 @@ rule Enrichments:
         wrapper = workflow.source_path(config['parameter']['Enrichments']['PATH_py']),
         gene_regex = config['parameter']['Enrichments']['gene_regex'],
         deg_dir = "06.DEG/DESEQ2",
-        cutoff = config['parameter']['Enrichments'].get('cutoff', 0.05)
+        cutoff = config['parameter']['Enrichments'].get('cutoff', 0.05),
+        padj_th = config['parameter']['DEG']['PVAL'],
+        lfc_th = config['parameter']['DEG']['LFC'],
+        kegg_rscript = workflow.source_path(config['parameter']['Enrichments'].get('PATH_kegg', '../src/src/Enrichments/kegg_enricher.r')),
+        kegg_config = json.dumps(config['deg_enrich_wrapper'][config['Genome_Version']].get('kegg', {})),
     shell:
         """
+        mkdir -p {output.Enrichments_dir:q}
+        printf '%s' {params.kegg_config:q} > {output.Enrichments_dir:q}/kegg_config.json
         python {params.wrapper} \
             --rscript {params.r_script} \
             --deg_info {input.DEG_info} \
@@ -268,5 +281,8 @@ rule Enrichments:
             -d {output.Enrichments_dir} \
             --gene_col '{params.gene_col}' \
             --gene_regex '{params.gene_regex}' \
+            --kegg_config {output.Enrichments_dir:q}/kegg_config.json \
+            --kegg_rscript {params.kegg_rscript:q} \
+            --padj_th {params.padj_th} --lfc_th {params.lfc_th} \
             --cutoff {params.cutoff} > {log} 2>&1
         """

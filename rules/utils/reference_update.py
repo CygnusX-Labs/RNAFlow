@@ -16,6 +16,7 @@ PATH_KEYS = {
     "go_annotation",
     "obo",
     "ref_all",
+    "id_map",
 }
 
 
