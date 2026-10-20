@@ -25,9 +25,10 @@ Reference:
     # Base directory for reference outputs. This should match the main
     # pipeline's reference_path (config/reference.yaml). The workflow will
     # create a subdirectory named after 'name' (e.g. GRCm39) under this path.
-    workflow: /home/zj/reference/RNAFlow_reference
+    workflow: /path/to/reference/RNAFlow_reference
   data_dir:
-    fa: /home/zj/temp/GRCm39/GRCm39.genome.fa
-    gff: /home/zj/temp/GRCm39/gencode.vM38.annotation.gff3
-    gtf: /home/zj/temp/GRCm39/gencode.vM38.annotation.gtf
-    go: /home/zj/temp/GRCm39/mgigene_go_annotation.tsv
+    # Replace with the actual genome FASTA/GTF/GFF and gene-GO annotation paths.
+    fa: /path/to/genome/GRCm39.genome.fa
+    gff: /path/to/genome/gencode.vM38.annotation.gff3
+    gtf: /path/to/genome/gencode.vM38.annotation.gtf
+    go: /path/to/genome/mgigene_go_annotation.tsv

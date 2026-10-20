@@ -182,6 +182,7 @@ rule Report:
                     exit 1
                 fi
                 docker run --rm --user $(id -u):$(id -g) \
+                    -e ARK_API_KEY -e DASHSCOPE_API_KEY -e OPENAI_API_KEY \
                     -v {params.data_dir}:/data:rw \
                     -v {params.Report_dir}:/workspace:rw \
                     -v {input.json_file}:/app/project_summary.json:ro \

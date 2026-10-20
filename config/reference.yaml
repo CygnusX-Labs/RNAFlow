@@ -16,7 +16,7 @@
 
 # Reference Genome Root Directory
 # Base path where all reference genome files are stored
-reference_path : /home/zj/reference/RNAFlow_reference
+reference_path : /data/jzhang/reference/RNAFlow_reference
 
 # FastQ Screen Database Root Path
 # Directory containing contamination screening databases for fastq_screen
@@ -33,6 +33,8 @@ can_use_genome_version:
   - TAIR10.1            # Arabidopsis thaliana TAIR10.1
   - GRCm39              # Mus musculus (Mouse) GRCm39
   - hg38                # Homo sapiens (Human) GRCh38/hg38
+  - Fragaria_ananassa_Benihoppe_v1.0
+  - ziyushenshu_v1      # Dioscorea alata (紫玉参薯) 006T2T
 
 # MCP Genome Version
 # Unified genome version configuration for MCP server
@@ -58,6 +60,12 @@ mcp_genome_version:
   hg38:
     name: hg38
     description: Human reference genome (GRCh38/hg38)
+  Fragaria_ananassa_Benihoppe_v1.0:
+    name: Fragaria_ananassa_Benihoppe_v1.0
+    description: Cultivated strawberry (Fragaria x ananassa) Fragaria_ananassa_Benihoppe_v1.0
+  ziyushenshu_v1:
+    name: ziyushenshu_v1
+    description: Dioscorea alata (紫玉参薯) reference genome (ziyushenshu_v1)
     
 # STAR Index and Reference File Configuration
 # Detailed file paths for each supported genome version
@@ -104,7 +112,7 @@ STAR_index:
       rsem_index: ITAG4.1/RSEM_ITAG4.1/RSEM_ITAG4.1
       rsem_index_dir: ITAG4.1/RSEM_ITAG4.1/
       bed12: ITAG4.1/ITAG4.1_gene_models.bed12
-      go_annotation: ITAG4.1/ITAG4.1_blast2go_annot.annot_deal
+      go_annotation: ITAG4.1/ITAG4.1_blast2go_annot.annot_deal.nover  # version-stripped copy; RSEM gene IDs lack .N suffixes
       ref_all: ITAG4.1/ITAG4.1_ref_all.txt
       
     TAIR10.1:
@@ -139,7 +147,31 @@ STAR_index:
       bed12: HG38/gencode.v49.annotation.bed12
       go_annotation: HG38/goa_human.go
       ref_all: HG38/hg38_ref_all.txt
-      
+
+    Fragaria_ananassa_Benihoppe_v1.0:
+      index: Fragaria_ananassa_Benihopp_v1.0/workflow/Fragaria_ananassa_Benihoppe_v1.0_RNAFlow_Index
+      genome_fa: Fragaria_ananassa_Benihopp_v1.0/workflow/Fragaria_ananassa_Benihoppe_Genome.fa
+      genome_gtf: Fragaria_ananassa_Benihopp_v1.0/workflow/Fragaria_ananassa_Benihoppe_Genome.gtf
+      genome_gff: Fragaria_ananassa_Benihopp_v1.0/workflow/Fragaria_ananassa_Benihoppe_Genome.gff3
+      rsem_index: Fragaria_ananassa_Benihopp_v1.0/workflow/Fragaria_ananassa_Benihoppe_v1.0_RNAFlow_Index/Fragaria_ananassa_Benihoppe_v1.0_RNAFlow_Index
+      rsem_index_dir: Fragaria_ananassa_Benihopp_v1.0/workflow/Fragaria_ananassa_Benihoppe_v1.0_RNAFlow_Index/
+      bed12: Fragaria_ananassa_Benihopp_v1.0/workflow/Fragaria_ananassa_Benihoppe_v1.0_RNAFlow_Index.bed12
+      # Placeholder only (header row). Replace with a real gene-GO annotation before
+      # running enrichment; otherwise the GO enrichment result will be empty.
+      go_annotation: Fragaria_ananassa_Benihopp_v1.0/workflow/Fxa_Camarosa_v1.2_go_annotation_placeholder.tsv
+      ref_all: Fragaria_ananassa_Benihopp_v1.0/workflow/Fragaria_ananassa_Benihoppe_v1.0_RNAFlow_Index_ref_all.txt
+
+    ziyushenshu_v1:
+      index: ziyushenshu_v1/RSEM_ziyushenshu_v1                                               # STAR INDEX CREATE BY RSEM
+      genome_fa: ziyushenshu_v1/006T2T_ziyushenshu_v1.fasta                                    # GENOME FASTA FILE
+      genome_gtf: ziyushenshu_v1/006T2T_ziyushenshu_v1.rsem.gtf                                # GENOME ANNOTATION FILE (with exon features, used for index)
+      genome_gff: ziyushenshu_v1/006T2T_ziyushenshu_v1.gff3                                    # GENOME ANNOTATION FILE
+      rsem_index: ziyushenshu_v1/RSEM_ziyushenshu_v1/RSEM_ziyushenshu_v1                       # RSEM INDEX
+      rsem_index_dir: ziyushenshu_v1/RSEM_ziyushenshu_v1/                                      # RSEM INDEX PATH
+      bed12: ziyushenshu_v1/ziyushenshu_v1.bed12                                               # GENE RANGES FOR GENE COVERAGE ANALYSIS
+      go_annotation: ziyushenshu_v1/ziyushenshu_v1_go_annotation.tsv                           # GO TERM ANNOTATION (gene-level, from eggNOG)
+      ref_all: ziyushenshu_v1/ziyushenshu_v1_ref_all.txt                                       # gene information
+
     GO:
       obo: go_database/go-basic.obo
 
@@ -152,12 +184,16 @@ deg_enrich_wrapper:
   Lsat_Salinas_v8_wx:     
     gene_col: 'Entrez ID'   # Column name for gene identifiers in deg result
   ITAG4.1:
-    gene_col: 'Entrez ID'   # Column name for gene identifiers in deg result
+    gene_col: 'ENSEMBL'   # Column name for gene identifiers in deg result (ITAG4.1 DEG table has ENSEMBL/Symbol, no Entrez)
   TAIR10.1:
     gene_col: 'Entrez ID'   # Column name for gene identifiers in deg result
   GRCm39:
     gene_col: 'ENSEMBL'   # Column name for gene identifiers in deg result
   hg38 :
+    gene_col: 'ENSEMBL'   # Column name for gene identifiers in deg result
+  Fragaria_ananassa_Benihoppe_v1.0:
+    gene_col: SYMBOL
+  ziyushenshu_v1:
     gene_col: 'ENSEMBL'   # Column name for gene identifiers in deg result
 
 ploidy_setting:
@@ -175,3 +211,7 @@ ploidy_setting:
     ploidy: 2
   hg38 :
     ploidy: 2
+  Fragaria_ananassa_Benihoppe_v1.0:
+    ploidy: 8
+  ziyushenshu_v1:
+    ploidy: 2  # D. alata 2n=40; confirm ploidy for this cultivar
