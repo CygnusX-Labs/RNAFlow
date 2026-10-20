@@ -10,7 +10,12 @@ RNAFlow is a fully automated RNA-seq analysis pipeline based on Snakemake. It im
 
 > **License**: RNAFlow is open-source software released under the MIT License. See [LICENSE](./LICENSE) for details.
 
+## 🧩 Built on FlowFrame
+
+RNAFlow is developed on the [FlowFrame](https://github.com/xsx123123/FlowFrame) specification for multi-omics workflow development. FlowFrame standardizes the pipeline entrypoint, directory layout, configuration and schema validation, module dependency and target generation, data gating, resource management, and delivery/report interfaces. RNAFlow applies these conventions to RNA-seq, combining them with its transcriptome-specific toolchain and the BioReport system.
+
 ## 📖 Table of Contents
+- [Built on FlowFrame](#-built-on-flowframe)
 - [Core Features](#-core-features)
 - [Analysis Workflow](#-analysis-workflow)
 - [System Architecture](#-system-architecture)

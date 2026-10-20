@@ -3,7 +3,12 @@
 RNAFlow 是一个基于 Snakemake 的全自动化 RNA-seq 分析流程。它实现了从**原始测序数据 (Raw Data)** 到**标准化生物信息报告 (Interactive Report)**，再到 **AI 智能结果解读** 的端到端闭环分析。
 > **开源协议**：RNAFlow 采用 MIT 协议开源。详情请参见 [LICENSE](../LICENSE)。
 
+## 🧩 基于 FlowFrame 构建
+
+RNAFlow 基于 [FlowFrame](https://github.com/xsx123123/FlowFrame) 多组学流程开发规范构建。FlowFrame 统一了流程入口、目录结构、配置与 Schema 校验、模块依赖与目标生成、数据准入、资源管理以及交付/报告接口；RNAFlow 在这些规范之上实现 RNA-seq 专属分析工具链与 BioReport 报告系统。
+
 ## 📖 目录
+- [基于 FlowFrame 构建](#-基于-flowframe-构建)
 - [核心特性](#-核心特性)
 - [分析工作流](#-分析工作流)
 - [系统架构](#-系统架构)
