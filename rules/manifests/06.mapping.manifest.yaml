@@ -1,0 +1,523 @@
+module:
+  id: "06.mapping"
+  title: "RNA-seq 比对与比对后处理(STAR + 全套 mapping QC)"
+  snakefile: "rules/06.mapping.smk"
+  stage: "02.mapping"
+  summary: >
+    用 STAR 做双端 spliced 比对(two-pass + chimeric + transcriptome BAM + bedGraph 信号),
+    随后排序索引、pigz 压缩信号文件,并跑 Qualimap/samtools/RSeQC(TIN、geneBody、
+    read_distribution)/deeptools BigWig 等 QC,最后以 MultiQC 收口 mapping 模块报告;
+    另产出 CRAM 归档与参考基因组版本溯源记录。
+  requires_helpers: []
+
+rules:
+  - name: STAR_mapping
+    summary: "STAR 双端 spliced 比对,产出坐标排序 BAM、转录组 BAM、嵌合接头与 bedGraph 信号"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: idx_dir
+        port: "star_index"
+        pattern: "{star_index}"  # config['STAR_index'][Genome_Version]['index'],外部预建索引目录
+      - name: genome_fa
+        port: "genome_fasta"
+        pattern: "{genome_fasta}"  # config['STAR_index'][Genome_Version]['genome_fa'],外部参考
+      - name: genome_gtf
+        port: "reference_gtf"
+        pattern: "{reference_gtf}"  # config['STAR_index'][Genome_Version]['genome_gtf'],外部参考
+      - name: r1
+        port: "trimmed_fastq_r1"
+        pattern: "01.qc/short_read_trim/{sample}.R1.trimed.fq.gz"
+      - name: r2
+        port: "trimmed_fastq_r2"
+        pattern: "01.qc/short_read_trim/{sample}.R2.trimed.fq.gz"
+    outputs:
+      - name: Aligned_bam
+        port: "star_genome_bam"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Aligned.sortedByCoord.out.bam"
+        kind: intermediate
+      - name: Transcriptome_bam
+        port: "star_transcriptome_bam"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Aligned.toTranscriptome.out.bam"
+        kind: intermediate
+      - name: log_final
+        port: "star_log_final"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Log.final.out"
+      - name: Chimeric
+        port: "star_chimeric_junction"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Chimeric.out.junction"
+        kind: intermediate
+      - name: UniqueMultiple_str1
+        port: "star_signal_bg"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.UniqueMultiple.str1.out.bg"
+        kind: intermediate
+      - name: UniqueMultiple_str2
+        port: "star_signal_bg"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.UniqueMultiple.str2.out.bg"
+        kind: intermediate
+      - name: Unique_str1
+        port: "star_signal_bg"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.Unique.str1.out.bg"
+        kind: intermediate
+      - name: Unique_str2
+        port: "star_signal_bg"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.Unique.str2.out.bg"
+        kind: intermediate
+    config_requires:
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号,索引 STAR_index 下具体参考资产"
+      - key: "STAR_index"
+        type: "object"
+        description: "按基因组版本组织的参考资产表,本 rule 用 index/genome_fa/genome_gtf"
+      - key: "parameter.STAR.PL"
+        type: "string"
+        default: "ILUMINA"
+        description: "测序平台,写入 BAM read group 的 PL 字段"
+      - key: "parameter.threads.STAR_MAPPING"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 15
+        description: "STAR 比对线程数"
+    conda: "envs/star.yml"
+    resources_tier: "high_resource"
+
+  - name: compress_bg
+    summary: "pigz 压缩 STAR 产出的 4 个 bedGraph 信号文件,产物入交付清单"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: UniqueMultiple_str1
+        port: "star_signal_bg"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.UniqueMultiple.str1.out.bg"
+      - name: UniqueMultiple_str2
+        port: "star_signal_bg"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.UniqueMultiple.str2.out.bg"
+      - name: Unique_str1
+        port: "star_signal_bg"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.Unique.str1.out.bg"
+      - name: Unique_str2
+        port: "star_signal_bg"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.Unique.str2.out.bg"
+    outputs:
+      - name: UniqueMultiple_str1_gz
+        port: "star_signal_bg_gz"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.UniqueMultiple.str1.out.bg.gz"
+      - name: UniqueMultiple_str2_gz
+        port: "star_signal_bg_gz"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.UniqueMultiple.str2.out.bg.gz"
+      - name: Unique_str1_gz
+        port: "star_signal_bg_gz"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.Unique.str1.out.bg.gz"
+      - name: Unique_str2_gz
+        port: "star_signal_bg_gz"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Signal.Unique.str2.out.bg.gz"
+    config_requires:
+      - key: "parameter.threads.compress_bg"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 4
+        description: "pigz 压缩线程数"
+    conda: "envs/pigz.yaml"
+    resources_tier: "high_resource"
+
+  - name: sort_index
+    summary: "samtools 排序+索引基因组 BAM,是几乎全部 mapping QC 与下游模块的统一枢纽"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: Aligned_bam
+        port: "star_genome_bam"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Aligned.sortedByCoord.out.bam"
+      - name: Transcriptome_bam  # 声明为输入但 shell 未使用,用于建立 DAG 依赖
+        port: "star_transcriptome_bam"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Aligned.toTranscriptome.out.bam"
+    outputs:
+      - name: sort_bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+        kind: intermediate
+      - name: sort_bam_bai
+        port: "sorted_bam_bai"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+        kind: intermediate
+    config_requires:
+      - key: "parameter.threads.samtools"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 10
+        description: "samtools sort/index 线程数"
+    conda: "envs/bwa2.yaml"
+    resources_tier: "high_resource"
+
+  - name: qualimap_qc
+    summary: "Qualimap bamqc 对 sort BAM 做综合 QC,产出 HTML 报告与机器可读结果"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bai
+        port: "sorted_bam_bai"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+    outputs:
+      - name: qualimap_report_html
+        port: "qualimap_html_report"
+        pattern: "02.mapping/qualimap_report/{sample}/qualimapReport.html"
+        kind: report
+      - name: qualimap_report_txt
+        port: "qualimap_genome_results"
+        pattern: "02.mapping/qualimap_report/{sample}/genome_results.txt"
+        kind: intermediate
+    config_requires:
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号(params.genome_gff 取自 STAR_index 下 genome_gtf)"
+      - key: "STAR_index"
+        type: "object"
+        description: "参考资产表,本 rule 用 genome_gtf 作 qualimap -gff 注释"
+      - key: "parameter.qualimap.format"
+        type: "string"
+        default: "HTML"
+        description: "Qualimap 报告输出格式"
+      - key: "parameter.qualimap.mem"
+        type: "string"
+        default: "20000M"
+        description: "Qualimap Java 内存配置(注:shell 中实际硬编码 --java-mem-size=16G)"
+      - key: "parameter.threads.qualimap"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 4
+        description: "Qualimap 线程数"
+    conda: "envs/qualimap.yaml"
+    resources_tier: "high_resource"
+
+  - name: samtools_flagst
+    summary: "samtools flagstat 生成比对统计 TSV"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bai
+        port: "sorted_bam_bai"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+    outputs:
+      - name: samtools_flagstat
+        port: "samtools_flagstat"
+        pattern: "02.mapping/samtools_flagstat/{sample}_bam_flagstat.tsv"
+    config_requires:
+      - key: "parameter.threads.samtools_flagstat"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 4
+        description: "samtools flagstat 线程数"
+    conda: "envs/bwa2.yaml"
+    resources_tier: "high_resource"
+
+  - name: samtools_stats
+    summary: "samtools stats 生成带参考基因组的详细比对统计"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bai
+        port: "sorted_bam_bai"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+    outputs:
+      - name: samtools_stats
+        port: "samtools_stats"
+        pattern: "02.mapping/samtools_stats/{sample}_bam_stats.tsv"
+    config_requires:
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号(params.reference 取自 STAR_index 下 genome_fa)"
+      - key: "STAR_index"
+        type: "object"
+        description: "参考资产表,本 rule 用 genome_fa 作 samtools stats --reference"
+      - key: "parameter.threads.samtools_stats"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 4
+        description: "samtools stats 线程数"
+    conda: "envs/bwa2.yaml"
+    resources_tier: "high_resource"
+
+  - name: bam2cram
+    summary: "BAM 转 CRAM 参考压缩归档并建索引,交付/存储产物"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bai
+        port: "sorted_bam_bai"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+    outputs:
+      - name: cram
+        port: "cram"
+        pattern: "02.mapping/cram/{sample}.cram"
+      - name: cram_index
+        port: "cram_index"
+        pattern: "02.mapping/cram/{sample}.cram.crai"
+    config_requires:
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号(params.reference 取自 STAR_index 下 genome_fa)"
+      - key: "STAR_index"
+        type: "object"
+        description: "参考资产表,本 rule 用 genome_fa 作 CRAM 压缩参考"
+      - key: "parameter.threads.bam2cram"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 6
+        description: "samtools view/index 线程数"
+    conda: "envs/bwa2.yaml"
+    resources_tier: "high_resource"
+
+  - name: record_ref_metadata
+    summary: "记录参考基因组版本/FASTA 路径/sequence dictionary 到 reference_version.txt(溯源)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: ref
+        port: "genome_fasta"
+        pattern: "{genome_fasta}"  # config['STAR_index'][Genome_Version]['genome_fa'],外部参考
+    outputs:
+      - name: ref_info
+        port: "reference_version_info"
+        pattern: "02.mapping/cram/reference_version.txt"
+    config_requires:
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号(shell 中 f-string 直接插值写入产物)"
+      - key: "STAR_index"
+        type: "object"
+        description: "参考资产表,本 rule 用 genome_fa"
+    conda: "envs/bwa2.yaml"
+    resources_tier: "low_resource"
+
+  - name: rseqc_tin
+    summary: "RSeQC tin.py 计算 RNA 完整性 TIN 评分(明细 + 汇总)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bai
+        port: "sorted_bam_bai"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+      - name: bed
+        port: "reference_bed12"
+        pattern: "{reference_bed12}"  # config['STAR_index'][Genome_Version]['bed12'],外部参考
+    outputs:
+      - name: tin_score
+        port: "tin_score"
+        pattern: "02.mapping/tin/{sample}.tin.xls"
+      - name: tin_summary
+        port: "tin_summary"
+        pattern: "02.mapping/tin/{sample}.summary.txt"
+    config_requires:
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号,索引 STAR_index 下 bed12"
+      - key: "STAR_index"
+        type: "object"
+        description: "参考资产表,本 rule 用 bed12"
+    conda: "envs/rseqc.yaml"
+    resources_tier: "high_resource"
+
+  - name: bamCoverage
+    summary: "deeptools bamCoverage 生成标准化 BigWig 覆盖度轨道(文件名内嵌 normalizeUsing)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bai
+        port: "sorted_bam_bai"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+    outputs:
+      - name: bw
+        port: "bigwig_coverage"
+        pattern: "02.mapping/bamCoverage/{sample}_{normalizeUsing}.bw"  # 文件名中段取自 config parameter.bamCoverage.normalizeUsing
+    config_requires:
+      - key: "bamCoverage"
+        type: "boolean"
+        description: "交付开关:开启时 BigWig 产物进入 datadeliver 交付清单"
+      - key: "parameter.bamCoverage.binSize"
+        type: "integer"
+        minimum: 1
+        default: 10
+        description: "覆盖度计算 bin 大小(bp)"
+      - key: "parameter.bamCoverage.smoothLength"
+        type: "integer"
+        minimum: 1
+        default: 14
+        description: "平滑窗口大小(bp)"
+      - key: "parameter.bamCoverage.normalizeUsing"
+        type: "string"
+        enum: ["RPKM", "CPM", "BPM", "RPGC", "None"]
+        default: "RPKM"
+        description: "标准化方法,同时决定输出文件名后缀"
+      - key: "parameter.threads.bamCoverage"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 6
+        description: "bamCoverage 线程数"
+    conda: "envs/deeptools.yaml"
+    resources_tier: "high_resource"
+
+  - name: geneBody_coverage
+    summary: "RSeQC geneBody_coverage2 基于 BigWig 计算基因体覆盖均一性(txt/R 脚本/PDF)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bw
+        port: "bigwig_coverage"
+        pattern: "02.mapping/bamCoverage/{sample}_{normalizeUsing}.bw"  # 与 bamCoverage 输出同模板,依赖 parameter.bamCoverage.normalizeUsing
+    outputs:
+      - name: geneBody
+        port: "genebody_coverage_txt"
+        pattern: "02.mapping/bamCoverage/{sample}.geneBodyCoverage.txt"
+      - name: r
+        port: "genebody_coverage_plot_r"
+        pattern: "02.mapping/bamCoverage/{sample}.geneBodyCoverage_plot.r"
+        kind: intermediate
+      - name: pdf
+        port: "genebody_coverage_pdf"
+        pattern: "02.mapping/bamCoverage/{sample}.geneBodyCoverage.pdf"
+        kind: report
+    config_requires:
+      - key: "rseqc"
+        type: "boolean"
+        description: "交付开关:开启时 read_distribution/geneBodyCoverage 产物进入交付清单"
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号(params.bed12 取自 STAR_index 下 bed12)"
+      - key: "STAR_index"
+        type: "object"
+        description: "参考资产表,本 rule 用 bed12 作基因体注释"
+      - key: "parameter.bamCoverage.normalizeUsing"
+        type: "string"
+        enum: ["RPKM", "CPM", "BPM", "RPGC", "None"]
+        default: "RPKM"
+        description: "输入 BigWig 文件名后缀所依赖的标准化方法"
+    conda: "envs/rseqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: read_distribution
+    summary: "RSeQC read_distribution 统计 reads 在基因组特征(CDS/UTR/intron 等)上的分布"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bed
+        port: "reference_bed12"
+        pattern: "{reference_bed12}"  # config['STAR_index'][Genome_Version]['bed12'],外部参考
+    outputs:
+      - name: txt
+        port: "read_distribution_txt"
+        pattern: "02.mapping/read_distribution/{sample}.read_distribution.txt"
+    config_requires:
+      - key: "rseqc"
+        type: "boolean"
+        description: "交付开关:开启时 read_distribution 产物进入交付清单"
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号,索引 STAR_index 下 bed12"
+      - key: "STAR_index"
+        type: "object"
+        description: "参考资产表,本 rule 用 bed12"
+    conda: "envs/rseqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: mapping_report
+    summary: "聚合全部样本的 STAR/Qualimap/samtools/TIN/geneBody/read_distribution 结果为 mapping 模块 MultiQC 总报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: log_final
+        port: "star_log_final"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Log.final.out"
+        expand_over: samples
+      - name: qualimap_report_html
+        port: "qualimap_html_report"
+        pattern: "02.mapping/qualimap_report/{sample}/qualimapReport.html"
+        expand_over: samples
+      - name: qualimap_report_txt
+        port: "qualimap_genome_results"
+        pattern: "02.mapping/qualimap_report/{sample}/genome_results.txt"
+        expand_over: samples
+      - name: samtools_flagstat
+        port: "samtools_flagstat"
+        pattern: "02.mapping/samtools_flagstat/{sample}_bam_flagstat.tsv"
+        expand_over: samples
+      - name: samtools_stats
+        port: "samtools_stats"
+        pattern: "02.mapping/samtools_stats/{sample}_bam_stats.tsv"
+        expand_over: samples
+      - name: tin_score
+        port: "tin_score"
+        pattern: "02.mapping/tin/{sample}.tin.xls"
+        expand_over: samples
+      - name: tin_summary
+        port: "tin_summary"
+        pattern: "02.mapping/tin/{sample}.summary.txt"
+        expand_over: samples
+      - name: geneBody
+        port: "genebody_coverage_txt"
+        pattern: "02.mapping/bamCoverage/{sample}.geneBodyCoverage.txt"
+        expand_over: samples
+      - name: pdf
+        port: "genebody_coverage_pdf"
+        pattern: "02.mapping/bamCoverage/{sample}.geneBodyCoverage.pdf"
+        expand_over: samples
+      - name: txt
+        port: "read_distribution_txt"
+        pattern: "02.mapping/read_distribution/{sample}.read_distribution.txt"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "multiqc_mapping_report"
+        pattern: "02.mapping/mapping_report/multiqc_mapping_report.html"
+        kind: report
+    config_requires:
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"

@@ -1,0 +1,723 @@
+# agent/ports.yaml —— RNAFlow 端口中央注册表（新增端口类型必须先登记）
+# 依据：全量 rule 审计报告（14 个模块、65 条活跃 rule）；已排除注释掉的
+# estimate_library_complexity(06) / build_rsem_index(07) / gtf2bed12(11)。
+# 命名：小写 snake_case；属性不同的产物（raw vs trimmed、sort/dedup/split bam）用不同端口。
+# 说明：13.deliver / 14.Report 各 rule 的匿名 input `ANALYSIS_TARGETS` 是全局收集器
+# （= AnalysisTargets 全量产物），在 DAG 上等价于消费本表中几乎所有非 external 端口，
+# 不逐端口重复列入 consumers，避免噪音；其余命名 input 槽的消费者均已逐条登记。
+
+ports:
+  # ========== 外部资产（库内无生产者） ==========
+  raw_fastq_dir:
+    description: "用户原始测序数据目录（config['raw_data_path'] 下各 <base>/<sample>/ 目录或 <base>/<sample>* 文件，raw FASTQ，未经标准化命名）"
+    external: true
+    producers: []
+    consumers: ["02.file_convert_md5.seq_preprocessor"]
+  fastq_screen_conf_template:
+    description: "fastq_screen 配置模板（仓库内 ../data/fastq_screen.conf_template，含 __FASTQ_SCREEN_DB_PATH__ 占位符）"
+    external: true
+    producers: []
+    consumers: ["04.Contamination_check.generate_fastq_screen_conf"]
+  fastq_screen_db:
+    description: "fastq_screen 污染筛查数据库根目录（config['fastq_screen_db_path']，外部参考库，按基因组分子目录）"
+    external: true
+    producers: []
+    consumers: ["04.Contamination_check.generate_fastq_screen_conf", "04.Contamination_check.check_fastq_screen_conf"]
+  star_index:
+    description: "STAR 比对索引目录（config['STAR_index'][Genome_Version]['index']，预建外部参考索引）"
+    external: true
+    producers: []
+    consumers: ["06.mapping.STAR_mapping"]
+  genome_fasta:
+    description: "参考基因组 FASTA（config['STAR_index'][Genome_Version]['genome_fa']，外部参考资产）"
+    external: true
+    producers: []
+    consumers:
+      - "06.mapping.STAR_mapping"
+      - "06.mapping.samtools_stats"
+      - "06.mapping.bam2cram"
+      - "06.mapping.record_ref_metadata"
+      - "08.call_variant.CreateRefIndex"
+      - "08.call_variant.SplitNCigarReads"
+      - "08.call_variant.bcftools_stats_raw"
+      - "08.call_variant.bcftools_stats_pass"
+      - "11.rMATS.CIRCexplorer2_run"
+      - "12.GeneFusion.Arriba_Run"
+  reference_gtf:
+    description: "参考基因注释 GTF（config['STAR_index'][Genome_Version]['genome_gtf']，外部参考资产；与 GFF3 是不同文件）"
+    external: true
+    producers: []
+    consumers:
+      - "06.mapping.STAR_mapping"
+      - "06.mapping.qualimap_qc"
+      - "11.rMATS.rmats_run"
+      - "11.rMATS.rmats_single_run"
+      - "12.GeneFusion.Arriba_Run"
+  reference_gff:
+    description: "参考基因注释 GFF/GFF3（config['STAR_index'][Genome_Version]['genome_gff']，外部参考资产，供 StringTie/gffcompare 使用）"
+    external: true
+    producers: []
+    consumers:
+      - "09.Assembly.StringTie_Assembly"
+      - "09.Assembly.StringTie_Merge"
+      - "09.Assembly.GffCompare"
+  reference_bed12:
+    description: "参考基因 BED12（config['STAR_index'][Genome_Version]['bed12']，预建外部参考；流程内的 gtf2bed12 rule 已注释，不在库内生成）"
+    external: true
+    producers: []
+    consumers:
+      - "06.mapping.rseqc_tin"
+      - "06.mapping.geneBody_coverage"
+      - "06.mapping.read_distribution"
+      - "11.rMATS.infer_experiment"
+      - "11.rMATS.junction_annotation"
+  rsem_index:
+    description: "RSEM 定量索引文件组（config['STAR_index'][Genome_Version]['rsem_index'] 的 .ti/.seq/.transcripts.fa，预建外部索引；流程内的 build_rsem_index 已注释）"
+    external: true
+    producers: []
+    consumers: ["07.rsem.RSEM"]
+  go_obo:
+    description: "GO 本体文件 go-basic.obo（config['STAR_index']['GO']['obo']，外部参考资产）"
+    external: true
+    producers: []
+    consumers: ["10.DEG_Enrichments.Enrichments"]
+  go_annotation:
+    description: "基因-GO 注释表（config['STAR_index'][Genome_Version]['go_annotation']，外部参考资产）"
+    external: true
+    producers: []
+    consumers: ["10.DEG_Enrichments.Enrichments"]
+  ref_all:
+    description: "基因信息总表 ref_all.txt（config['STAR_index'][Genome_Version]['ref_all']，外部参考资产，CIRCexplorer2 注释用）"
+    external: true
+    producers: []
+    consumers: ["11.rMATS.CIRCexplorer2_run"]
+  sample_sheet:
+    description: "样本信息表 CSV（config['sample_csv']，由用户 --analysisyaml 注入，列 sample/sample_name/group）"
+    external: true
+    producers: []
+    consumers:
+      - "07.rsem.merge_rsem"
+      - "10.DEG_Enrichments.gene_dist"
+      - "10.DEG_Enrichments.gene_heatmap_tpm"
+      - "10.DEG_Enrichments.gene_heatmap_fpkm"
+      - "10.DEG_Enrichments.DEG"
+      - "14.Report.generate_docker_json"
+
+  # ========== 02.file_convert_md5 ==========
+  raw_fastq_link_dir:
+    description: "标准化软链目录 00.raw_data/link_dir/（directory() 输出，raw FASTQ 的标准化落点）"
+    producers: ["02.file_convert_md5.seq_preprocessor"]
+    consumers: []
+  raw_fastq_r1:
+    description: "标准化 R1 raw FASTQ 软链（00.raw_data/link_dir/{sample}/{sample}_R1.fq.gz，未经 trim；04 模块 fastq_screen 经 params 事实消费）"
+    producers: ["02.file_convert_md5.seq_preprocessor"]
+    consumers:
+      - "02.file_convert_md5.check_md5"
+      - "03.short_read_qc.short_read_qc_r1"
+      - "04.Contamination_check.short_read_fastq_screen_r1"
+      - "05.short_read_clean.short_read_fastp"
+  raw_fastq_r2:
+    description: "标准化 R2 raw FASTQ 软链（00.raw_data/link_dir/{sample}/{sample}_R2.fq.gz，未经 trim；04 模块 fastq_screen 经 params 事实消费）"
+    producers: ["02.file_convert_md5.seq_preprocessor"]
+    consumers:
+      - "02.file_convert_md5.check_md5"
+      - "03.short_read_qc.short_read_qc_r2"
+      - "04.Contamination_check.short_read_fastq_screen_r2"
+      - "05.short_read_clean.short_read_fastp"
+  raw_data_md5_json:
+    description: "原始数据 MD5 审计 JSON（00.raw_data/link_dir/raw_data_md5.json，原始路径→标准化路径映射）"
+    producers: ["02.file_convert_md5.seq_preprocessor"]
+    consumers: ["02.file_convert_md5.check_md5"]
+  md5_check:
+    description: "MD5 校验通过门控文件（01.qc/md5_check.tsv），全 pipeline 读原始数据 rule 的 input gate"
+    producers: ["02.file_convert_md5.check_md5"]
+    consumers:
+      - "03.short_read_qc.short_read_qc_r1"
+      - "03.short_read_qc.short_read_qc_r2"
+      - "04.Contamination_check.short_read_fastq_screen_r1"
+      - "04.Contamination_check.short_read_fastq_screen_r2"
+      - "05.short_read_clean.short_read_fastp"
+      - "05.short_read_clean.multiqc_trim"
+      - "05.short_read_clean.merge_qc_report"
+
+  # ========== 03.short_read_qc ==========
+  fastqc_html_r1:
+    description: "R1 FastQC 单样本 HTML 报告（01.qc/short_read_qc_r1/{sample}_R1_fastqc.html，raw 阶段，人类可读）"
+    producers: ["03.short_read_qc.short_read_qc_r1"]
+    consumers: []
+  fastqc_zip_r1:
+    description: "R1 FastQC 原始数据包（01.qc/short_read_qc_r1/{sample}_R1_fastqc.zip，raw 阶段）"
+    producers: ["03.short_read_qc.short_read_qc_r1"]
+    consumers:
+      - "03.short_read_qc.short_read_multiqc_r1"
+      - "05.short_read_clean.merge_qc_report"
+  fastqc_html_r2:
+    description: "R2 FastQC 单样本 HTML 报告（01.qc/short_read_qc_r2/{sample}_R2_fastqc.html，raw 阶段）"
+    producers: ["03.short_read_qc.short_read_qc_r2"]
+    consumers: []
+  fastqc_zip_r2:
+    description: "R2 FastQC 原始数据包（01.qc/short_read_qc_r2/{sample}_R2_fastqc.zip，raw 阶段）"
+    producers: ["03.short_read_qc.short_read_qc_r2"]
+    consumers:
+      - "03.short_read_qc.short_read_multiqc_r2"
+      - "05.short_read_clean.merge_qc_report"
+  multiqc_raw_r1_report:
+    description: "R1 raw FastQC 全样本 MultiQC 聚合报告（01.qc/short_read_r1_multiqc/multiqc_r1_raw-data_report.html）"
+    producers: ["03.short_read_qc.short_read_multiqc_r1"]
+    consumers: []
+  multiqc_raw_r2_report:
+    description: "R2 raw FastQC 全样本 MultiQC 聚合报告（01.qc/short_read_r2_multiqc/multiqc_r2_raw-data_report.html）"
+    producers: ["03.short_read_qc.short_read_multiqc_r2"]
+    consumers: []
+
+  # ========== 04.Contamination_check ==========
+  fastq_screen_conf:
+    description: "fastq_screen 运行配置（01.qc/fastq_screen.conf，由模板替换 DB 路径生成）"
+    producers: ["04.Contamination_check.generate_fastq_screen_conf"]
+    consumers:
+      - "04.Contamination_check.check_fastq_screen_conf"
+      - "04.Contamination_check.short_read_fastq_screen_r1"
+      - "04.Contamination_check.short_read_fastq_screen_r2"
+  fastq_screen_conf_check:
+    description: "fastq_screen 配置/数据库可达性校验通过锚点（01.qc/fastq_screen_config_check.log，模块内门控）"
+    producers: ["04.Contamination_check.check_fastq_screen_conf"]
+    consumers:
+      - "04.Contamination_check.short_read_fastq_screen_r1"
+      - "04.Contamination_check.short_read_fastq_screen_r2"
+  fastq_screen_txt_r1:
+    description: "R1 污染筛查结果（01.qc/fastq_screen_r1/{sample}_R1_screen.txt）"
+    producers: ["04.Contamination_check.short_read_fastq_screen_r1"]
+    consumers: ["04.Contamination_check.fastq_screen_multiqc_r1"]
+  fastq_screen_txt_r2:
+    description: "R2 污染筛查结果（01.qc/fastq_screen_r2/{sample}_R2_screen.txt）"
+    producers: ["04.Contamination_check.short_read_fastq_screen_r2"]
+    consumers: ["04.Contamination_check.fastq_screen_multiqc_r2"]
+  fastq_screen_multiqc_r1_report:
+    description: "R1 污染筛查全样本 MultiQC 聚合报告（01.qc/fastq_screen_multiqc_r1/multiqc_r1_fastq_screen_report.html）"
+    producers: ["04.Contamination_check.fastq_screen_multiqc_r1"]
+    consumers: []
+  fastq_screen_multiqc_r2_report:
+    description: "R2 污染筛查全样本 MultiQC 聚合报告（01.qc/fastq_screen_multiqc_r2/multiqc_r2_fastq_screen_report.html）"
+    producers: ["04.Contamination_check.fastq_screen_multiqc_r2"]
+    consumers: []
+
+  # ========== 05.short_read_clean ==========
+  trimmed_fastq_r1:
+    description: "R1 trimmed/clean FASTQ（01.qc/short_read_trim/{sample}.R1.trimed.fq.gz，fastp 去接头+质量过滤后，所有下游比对的输入）"
+    producers: ["05.short_read_clean.short_read_fastp"]
+    consumers:
+      - "05.short_read_clean.multiqc_trim"
+      - "05.short_read_clean.merge_qc_report"
+      - "06.mapping.STAR_mapping"
+  trimmed_fastq_r2:
+    description: "R2 trimmed/clean FASTQ（01.qc/short_read_trim/{sample}.R2.trimed.fq.gz，fastp 去接头+质量过滤后）"
+    producers: ["05.short_read_clean.short_read_fastp"]
+    consumers:
+      - "05.short_read_clean.multiqc_trim"
+      - "05.short_read_clean.merge_qc_report"
+      - "06.mapping.STAR_mapping"
+  fastp_html_report:
+    description: "fastp 单样本 HTML 报告（01.qc/short_read_trim/{sample}.trimed.html）"
+    producers: ["05.short_read_clean.short_read_fastp"]
+    consumers:
+      - "05.short_read_clean.multiqc_trim"
+      - "05.short_read_clean.merge_qc_report"
+  fastp_json_report:
+    description: "fastp 单样本 JSON 报告（01.qc/short_read_trim/{sample}.trimed.json）"
+    producers: ["05.short_read_clean.short_read_fastp"]
+    consumers: []
+  multiqc_trim_report:
+    description: "trim 阶段全样本 MultiQC 聚合报告（01.qc/multiqc_short_read_trim/multiqc_short_read_trim_report.html）"
+    producers: ["05.short_read_clean.multiqc_trim"]
+    consumers: []
+  multiqc_merge_qc_report:
+    description: "预处理总报告（01.qc/multiqc_merge_qc/multiqc_merge_qc_report.html，raw FastQC + trim fastp 跨模块聚合）"
+    producers: ["05.short_read_clean.merge_qc_report"]
+    consumers: []
+
+  # ========== 06.mapping ==========
+  star_genome_bam:
+    description: "STAR 基因组坐标排序 BAM（02.mapping/STAR/{sample}/{sample}.Aligned.sortedByCoord.out.bam，temp 中间产物）"
+    producers: ["06.mapping.STAR_mapping"]
+    consumers: ["06.mapping.sort_index"]
+  star_transcriptome_bam:
+    description: "STAR 转录组坐标 BAM（02.mapping/STAR/{sample}/{sample}.Aligned.toTranscriptome.out.bam，temp，RSEM 定量输入）"
+    producers: ["06.mapping.STAR_mapping"]
+    consumers:
+      - "06.mapping.sort_index"
+      - "07.rsem.RSEM"
+  star_log_final:
+    description: "STAR 比对最终统计日志（02.mapping/STAR/{sample}/{sample}.Log.final.out）"
+    producers: ["06.mapping.STAR_mapping"]
+    consumers: ["06.mapping.mapping_report"]
+  star_chimeric_junction:
+    description: "STAR 嵌合接头文件（02.mapping/STAR/{sample}/{sample}.Chimeric.out.junction，circRNA 鉴定输入）"
+    producers: ["06.mapping.STAR_mapping"]
+    consumers: ["11.rMATS.CIRCexplorer2_run"]
+  star_signal_bg:
+    description: "STAR 信号 bedGraph 四件套（Signal.Unique(Multiple).str1(2).out.bg，未压缩）"
+    producers: ["06.mapping.STAR_mapping"]
+    consumers: ["06.mapping.compress_bg"]
+  star_signal_bg_gz:
+    description: "压缩后的 STAR 信号 bedGraph 四件套（*.out.bg.gz，pigz 压缩，交付产物）"
+    producers: ["06.mapping.compress_bg"]
+    consumers: []
+  sorted_bam:
+    description: "排序+索引后的基因组 BAM（02.mapping/STAR/sort_index/{sample}.sort.bam，temp，mapping QC 与下游模块的统一枢纽）"
+    producers: ["06.mapping.sort_index"]
+    consumers:
+      - "06.mapping.qualimap_qc"
+      - "06.mapping.samtools_flagst"
+      - "06.mapping.samtools_stats"
+      - "06.mapping.bam2cram"
+      - "06.mapping.rseqc_tin"
+      - "06.mapping.bamCoverage"
+      - "06.mapping.read_distribution"
+      - "08.call_variant.AddOrReplaceReadGroups"
+      - "09.Assembly.StringTie_Assembly"
+      - "11.rMATS.infer_experiment"
+      - "11.rMATS.junction_annotation"
+      - "11.rMATS.rmats_run"
+      - "11.rMATS.rmats_single_run"
+      - "12.GeneFusion.Arriba_Run"
+  sorted_bam_bai:
+    description: "sorted BAM 索引（02.mapping/STAR/sort_index/{sample}.sort.bam.bai）"
+    producers: ["06.mapping.sort_index"]
+    consumers:
+      - "06.mapping.qualimap_qc"
+      - "06.mapping.samtools_flagst"
+      - "06.mapping.samtools_stats"
+      - "06.mapping.bam2cram"
+      - "06.mapping.rseqc_tin"
+      - "06.mapping.bamCoverage"
+      - "08.call_variant.AddOrReplaceReadGroups"
+      - "11.rMATS.junction_annotation"
+  qualimap_html_report:
+    description: "Qualimap bamqc HTML 报告（02.mapping/qualimap_report/{sample}/qualimapReport.html）"
+    producers: ["06.mapping.qualimap_qc"]
+    consumers: ["06.mapping.mapping_report"]
+  qualimap_genome_results:
+    description: "Qualimap bamqc 机器可读结果（02.mapping/qualimap_report/{sample}/genome_results.txt）"
+    producers: ["06.mapping.qualimap_qc"]
+    consumers: ["06.mapping.mapping_report"]
+  samtools_flagstat:
+    description: "samtools flagstat 比对统计（02.mapping/samtools_flagstat/{sample}_bam_flagstat.tsv）"
+    producers: ["06.mapping.samtools_flagst"]
+    consumers: ["06.mapping.mapping_report"]
+  samtools_stats:
+    description: "samtools stats 详细比对统计（02.mapping/samtools_stats/{sample}_bam_stats.tsv）"
+    producers: ["06.mapping.samtools_stats"]
+    consumers: ["06.mapping.mapping_report"]
+  cram:
+    description: "CRAM 压缩比对存档（02.mapping/cram/{sample}.cram，交付/归档产物）"
+    producers: ["06.mapping.bam2cram"]
+    consumers: []
+  cram_index:
+    description: "CRAM 索引（02.mapping/cram/{sample}.cram.crai）"
+    producers: ["06.mapping.bam2cram"]
+    consumers: []
+  reference_version_info:
+    description: "参考基因组版本溯源记录（02.mapping/cram/reference_version.txt）"
+    producers: ["06.mapping.record_ref_metadata"]
+    consumers: []
+  tin_score:
+    description: "RSeQC TIN RNA 完整性评分明细（02.mapping/tin/{sample}.tin.xls）"
+    producers: ["06.mapping.rseqc_tin"]
+    consumers: ["06.mapping.mapping_report"]
+  tin_summary:
+    description: "RSeQC TIN 汇总（02.mapping/tin/{sample}.summary.txt）"
+    producers: ["06.mapping.rseqc_tin"]
+    consumers: ["06.mapping.mapping_report"]
+  bigwig_coverage:
+    description: "标准化 BigWig 覆盖度轨道（02.mapping/bamCoverage/{sample}_{normalizeUsing}.bw，如 _RPKM.bw）"
+    producers: ["06.mapping.bamCoverage"]
+    consumers: ["06.mapping.geneBody_coverage"]
+  genebody_coverage_txt:
+    description: "基因体覆盖均一性数据（02.mapping/bamCoverage/{sample}.geneBodyCoverage.txt）"
+    producers: ["06.mapping.geneBody_coverage"]
+    consumers: ["06.mapping.mapping_report"]
+  genebody_coverage_plot_r:
+    description: "基因体覆盖绘图 R 脚本（02.mapping/bamCoverage/{sample}.geneBodyCoverage_plot.r）"
+    producers: ["06.mapping.geneBody_coverage"]
+    consumers: []
+  genebody_coverage_pdf:
+    description: "基因体覆盖均一性图（02.mapping/bamCoverage/{sample}.geneBodyCoverage.pdf）"
+    producers: ["06.mapping.geneBody_coverage"]
+    consumers: ["06.mapping.mapping_report"]
+  read_distribution_txt:
+    description: "reads 基因组特征分布（02.mapping/read_distribution/{sample}.read_distribution.txt，RSeQC）"
+    producers: ["06.mapping.read_distribution"]
+    consumers: ["06.mapping.mapping_report"]
+  multiqc_mapping_report:
+    description: "mapping 模块 QC 全样本 MultiQC 总报告（02.mapping/mapping_report/multiqc_mapping_report.html，模块收口产物）"
+    producers: ["06.mapping.mapping_report"]
+    consumers: []
+
+  # ========== 07.rsem ==========
+  rsem_genes_results:
+    description: "RSEM 基因水平定量结果（03.count/rsem/{sample}.genes.results，TPM/FPKM/counts）"
+    producers: ["07.rsem.RSEM"]
+    consumers: ["07.rsem.merge_rsem"]
+  rsem_isoforms_results:
+    description: "RSEM isoform 水平定量结果（03.count/rsem/{sample}.isoforms.results）"
+    producers: ["07.rsem.RSEM"]
+    consumers: ["07.rsem.merge_rsem"]
+  rsem_cnt:
+    description: "RSEM 计数统计（03.count/rsem/{sample}.stat/{sample}.cnt，MultiQC 消费）"
+    producers: ["07.rsem.RSEM"]
+    consumers: ["07.rsem.rsem_multiqc"]
+  rsem_model:
+    description: "RSEM EM 模型文件（03.count/rsem/{sample}.stat/{sample}.model）"
+    producers: ["07.rsem.RSEM"]
+    consumers: []
+  rsem_theta:
+    description: "RSEM theta 参数文件（03.count/rsem/{sample}.stat/{sample}.theta）"
+    producers: ["07.rsem.RSEM"]
+    consumers: []
+  multiqc_rsem_report:
+    description: "RSEM 定量 QC 全样本 MultiQC 聚合报告（03.count/multiqc_rsem_report.html）"
+    producers: ["07.rsem.rsem_multiqc"]
+    consumers: []
+  rsem_tpm_matrix:
+    description: "全样本 TPM 表达矩阵（03.count/merge_rsem_tpm.tsv，DEG/Report 下游主输入之一）"
+    producers: ["07.rsem.merge_rsem"]
+    consumers:
+      - "07.rsem.ultimate"
+      - "10.DEG_Enrichments.gene_dist"
+      - "10.DEG_Enrichments.gene_heatmap_tpm"
+  rsem_counts_matrix:
+    description: "全样本 counts 表达矩阵（03.count/merge_rsem_counts.tsv，DESeq2 差异分析主输入）"
+    producers: ["07.rsem.merge_rsem"]
+    consumers:
+      - "07.rsem.ultimate"
+      - "10.DEG_Enrichments.DEG"
+  rsem_fpkm_matrix:
+    description: "全样本 FPKM 表达矩阵（03.count/merge_rsem_fpkm.tsv）"
+    producers: ["07.rsem.merge_rsem"]
+    consumers:
+      - "07.rsem.ultimate"
+      - "10.DEG_Enrichments.gene_dist"
+      - "10.DEG_Enrichments.gene_heatmap_fpkm"
+  rsem_ultimate_dir:
+    description: "表达矩阵综合验证目录（03.count/rsem_ultimate/，directory() 输出，count 模块收口产物）"
+    producers: ["07.rsem.ultimate"]
+    consumers: []
+
+  # ========== 08.call_variant ==========
+  genome_dict:
+    description: "参考基因组 sequence dictionary（genome_fa 去扩展名 + .dict，GATK 前置索引，由库内 CreateRefIndex 生成）"
+    producers: ["08.call_variant.CreateRefIndex"]
+    consumers:
+      - "08.call_variant.SplitNCigarReads"
+      - "08.call_variant.HaplotypeCaller"
+      - "08.call_variant.VariantFiltration"
+      - "08.call_variant.SelectVariants"
+  genome_fai:
+    description: "参考基因组 FASTA 索引（genome_fa + .fai，GATK 前置索引，由库内 CreateRefIndex 生成）"
+    producers: ["08.call_variant.CreateRefIndex"]
+    consumers:
+      - "08.call_variant.SplitNCigarReads"
+      - "08.call_variant.HaplotypeCaller"
+      - "08.call_variant.VariantFiltration"
+      - "08.call_variant.SelectVariants"
+  rg_bam:
+    description: "加 read group 后的 BAM（04.variant/gatk/{sample}/{sample}.rg.bam，temp，GATK 预处理第一阶段）"
+    producers: ["08.call_variant.AddOrReplaceReadGroups"]
+    consumers: ["08.call_variant.MarkDuplicates"]
+  rg_bai:
+    description: "rg BAM 索引（04.variant/gatk/{sample}/{sample}.rg.bai，temp）"
+    producers: ["08.call_variant.AddOrReplaceReadGroups"]
+    consumers: []
+  dedup_bam:
+    description: "标记重复后的 BAM（04.variant/gatk/{sample}/{sample}.rg.dedup.bam，temp，GATK 预处理第二阶段）"
+    producers: ["08.call_variant.MarkDuplicates"]
+    consumers: ["08.call_variant.SplitNCigarReads"]
+  markdup_metrics:
+    description: "MarkDuplicates 重复率指标（04.variant/gatk_MarkDuplicates/{sample}.rg.dedup.metrics.txt）"
+    producers: ["08.call_variant.MarkDuplicates"]
+    consumers: []
+  split_bam:
+    description: "SplitNCigarReads 拆分后的 BAM（04.variant/gatk/{sample}/{sample}.rg.dedup.split.bam，变异检测最终输入 BAM）"
+    producers: ["08.call_variant.SplitNCigarReads"]
+    consumers: ["08.call_variant.HaplotypeCaller"]
+  split_bam_bai:
+    description: "split BAM 索引（04.variant/gatk/{sample}/{sample}.rg.dedup.split.bai）"
+    producers: ["08.call_variant.SplitNCigarReads"]
+    consumers: ["08.call_variant.HaplotypeCaller"]
+  raw_vcf:
+    description: "HaplotypeCaller 原始变异 VCF（04.variant/gatk/{sample}/{sample}.raw_variants.vcf，未过滤）"
+    producers: ["08.call_variant.HaplotypeCaller"]
+    consumers:
+      - "08.call_variant.VariantFiltration"
+      - "08.call_variant.bcftools_stats_raw"
+  raw_vcf_idx:
+    description: "原始变异 VCF 索引（*.raw_variants.vcf.idx）"
+    producers: ["08.call_variant.HaplotypeCaller"]
+    consumers:
+      - "08.call_variant.VariantFiltration"
+      - "08.call_variant.bcftools_stats_raw"
+  filtered_vcf:
+    description: "RNA-seq 特异阈值过滤后的 VCF（04.variant/gatk/{sample}/{sample}.filtered.vcf）"
+    producers: ["08.call_variant.VariantFiltration"]
+    consumers: ["08.call_variant.SelectVariants"]
+  filtered_vcf_idx:
+    description: "过滤后 VCF 索引（*.filtered.vcf.idx）"
+    producers: ["08.call_variant.VariantFiltration"]
+    consumers: []
+  pass_vcf:
+    description: "PASS 高置信变异 VCF（04.variant/gatk/{sample}/{sample}.final.pass.vcf，call_variant 交付产物）"
+    producers: ["08.call_variant.SelectVariants"]
+    consumers: ["08.call_variant.bcftools_stats_pass"]
+  pass_vcf_idx:
+    description: "PASS VCF 索引（*.final.pass.vcf.idx）"
+    producers: ["08.call_variant.SelectVariants"]
+    consumers: ["08.call_variant.bcftools_stats_pass"]
+  bcftools_stats_raw:
+    description: "原始变异 bcftools 统计（04.variant/gatk_bcftools_stats_raw/{sample}.raw_variants.stats）"
+    producers: ["08.call_variant.bcftools_stats_raw"]
+    consumers: ["08.call_variant.multiqc_bcftools_stats_raw"]
+  bcftools_stats_pass:
+    description: "PASS 变异 bcftools 统计（04.variant/gatk_bcftools_stats_pass/{sample}.final.pass.stats）"
+    producers: ["08.call_variant.bcftools_stats_pass"]
+    consumers: ["08.call_variant.multiqc_bcftools_stats_pass"]
+  multiqc_bcftools_raw_report:
+    description: "原始变异统计 MultiQC 聚合报告（04.variant/multiqc_gatk_bcftools_stats_raw/multiqc_gatk_bcftools_stats_raw.html）"
+    producers: ["08.call_variant.multiqc_bcftools_stats_raw"]
+    consumers: []
+  multiqc_bcftools_pass_report:
+    description: "PASS 变异统计 MultiQC 聚合报告（04.variant/multiqc_gatk_bcftools_stats_pass/multiqc_gatk_bcftools_stats_pass.html，模块主要 QC 交付物）"
+    producers: ["08.call_variant.multiqc_bcftools_stats_pass"]
+    consumers: []
+
+  # ========== 09.Assembly ==========
+  stringtie_gtf:
+    description: "单样本 StringTie 组装 GTF（05.assembly/stringtie/{sample}.gtf，参考引导转录本组装）"
+    producers: ["09.Assembly.StringTie_Assembly"]
+    consumers: ["09.Assembly.StringTie_Merge"]
+  stringtie_merged_gtf:
+    description: "全样本合并转录本目录 GTF（05.assembly/stringtie/merged.gtf）"
+    producers: ["09.Assembly.StringTie_Merge"]
+    consumers: ["09.Assembly.GffCompare"]
+  stringtie_mergelist:
+    description: "StringTie merge 输入清单（05.assembly/stringtie/mergelist.txt）"
+    producers: ["09.Assembly.StringTie_Merge"]
+    consumers: []
+  gffcompare_annotated_gtf:
+    description: "gffcompare 注释后 GTF（05.assembly/gffcompare/stringtie.annotated.gtf，带 class_code 分类）"
+    producers: ["09.Assembly.GffCompare"]
+    consumers: ["09.Assembly.Filter_Novel_Transcripts"]
+  gffcompare_stats:
+    description: "gffcompare 统计（05.assembly/gffcompare/stringtie.stats）"
+    producers: ["09.Assembly.GffCompare"]
+    consumers: []
+  gffcompare_tracking:
+    description: "gffcompare tracking 文件（05.assembly/gffcompare/stringtie.tracking）"
+    producers: ["09.Assembly.GffCompare"]
+    consumers: []
+  novel_transcripts_gtf:
+    description: "高置信新转录本 GTF（05.assembly/filter/novel_transcripts.gtf，class_code 过滤后，交付产物）"
+    producers: ["09.Assembly.Filter_Novel_Transcripts"]
+    consumers: []
+  final_novel_isoforms_gtf:
+    description: "最终新异构体 GTF（05.assembly/filter/final_Novel_Isoforms.gtf，模块最终交付物）"
+    producers: ["09.Assembly.Filter_Novel_Transcripts"]
+    consumers: []
+
+  # ========== 10.DEG_Enrichments ==========
+  gene_expression_dist_pdf:
+    description: "基因表达分布图 PDF（06.DEG/Gene_Expression/Gene_Expression_Distribution.pdf）"
+    producers: ["10.DEG_Enrichments.gene_dist"]
+    consumers: []
+  gene_expression_dist_png:
+    description: "基因表达分布图 PNG（06.DEG/Gene_Expression/Gene_Expression_Distribution.png）"
+    producers: ["10.DEG_Enrichments.gene_dist"]
+    consumers: []
+  heatmap_tpm_pdf:
+    description: "TPM 高变基因热图 PDF（06.DEG/Heatmap_tpm/Heatmap_TopVar.pdf）"
+    producers: ["10.DEG_Enrichments.gene_heatmap_tpm"]
+    consumers: []
+  heatmap_tpm_png:
+    description: "TPM 高变基因热图 PNG（06.DEG/Heatmap_tpm/Heatmap_TopVar.png）"
+    producers: ["10.DEG_Enrichments.gene_heatmap_tpm"]
+    consumers: []
+  heatmap_fpkm_pdf:
+    description: "FPKM 高变基因热图 PDF（06.DEG/Heatmap_fpkm/Heatmap_TopVar.pdf）"
+    producers: ["10.DEG_Enrichments.gene_heatmap_fpkm"]
+    consumers: []
+  heatmap_fpkm_png:
+    description: "FPKM 高变基因热图 PNG（06.DEG/Heatmap_fpkm/Heatmap_TopVar.png）"
+    producers: ["10.DEG_Enrichments.gene_heatmap_fpkm"]
+    consumers: []
+  deg_statistics_csv:
+    description: "全部 contrast 的差异分析统计总表（06.DEG/DESEQ2/All_Contrast_DEG_Statistics.csv，DESeq2）"
+    producers: ["10.DEG_Enrichments.DEG"]
+    consumers: ["10.DEG_Enrichments.Enrichments"]
+  deg_dir:
+    description: "DESeq2 差异分析结果目录（06.DEG/DESEQ2/，directory() 输出，含各 contrast 明细）"
+    producers: ["10.DEG_Enrichments.DEG"]
+    consumers: []
+  enrichments_dir:
+    description: "GO 富集分析结果目录（07.Enrichments/，directory() 输出，DEG 模块收口交付物）"
+    producers: ["10.DEG_Enrichments.Enrichments"]
+    consumers: []
+
+  # ========== 11.rMATS ==========
+  chimeric_clean_junction:
+    description: "清洗后的嵌合接头文件（02.mapping/STAR/{sample}/{sample}.Chimeric.clean.junction，temp 中间产物）"
+    producers: ["11.rMATS.CIRCexplorer2_run"]
+    consumers: []
+  circrna_back_spliced_bed:
+    description: "CIRCexplorer2 反向剪接位点 BED（02.mapping/CIRCexplorer2/{sample}/back_spliced_junction.bed）"
+    producers: ["11.rMATS.CIRCexplorer2_run"]
+    consumers: []
+  circrna_known_txt:
+    description: "CIRCexplorer2 已知 circRNA 注释结果（02.mapping/CIRCexplorer2/{sample}/circularRNA_known.txt）"
+    producers: ["11.rMATS.CIRCexplorer2_run"]
+    consumers: []
+  strandness_summary:
+    description: "单样本链特异性推断结果（07.AS/qc/strandness/{sample}.summary.txt，RSeQC infer_experiment）"
+    producers: ["11.rMATS.infer_experiment"]
+    consumers: ["11.rMATS.merge_strandness_results"]
+  all_samples_strandness:
+    description: "全样本链特异性汇总（07.AS/qc/all_samples_strandness.txt，rMATS 文库类型判定的前置锚点）"
+    producers: ["11.rMATS.merge_strandness_results"]
+    consumers:
+      - "11.rMATS.rmats_run"
+      - "11.rMATS.rmats_single_run"
+  junction_splice_events_pdf:
+    description: "剪接事件注释图（02.mapping/junction_annotation/{sample}.splice_events.pdf，RSeQC junction_annotation）"
+    producers: ["11.rMATS.junction_annotation"]
+    consumers: []
+  junction_splice_junction_pdf:
+    description: "剪接位点注释图（02.mapping/junction_annotation/{sample}.splice_junction.pdf）"
+    producers: ["11.rMATS.junction_annotation"]
+    consumers: []
+  junction_bed:
+    description: "剪接位点 BED（02.mapping/junction_annotation/{sample}.junction.bed）"
+    producers: ["11.rMATS.junction_annotation"]
+    consumers: []
+  junction_interact_bed:
+    description: "剪接位点交互 BED（02.mapping/junction_annotation/{sample}.junction.Interact.bed）"
+    producers: ["11.rMATS.junction_annotation"]
+    consumers: []
+  junction_plot_r:
+    description: "剪接位点绘图 R 脚本（02.mapping/junction_annotation/{sample}.junction_plot.r）"
+    producers: ["11.rMATS.junction_annotation"]
+    consumers: []
+  junction_xls:
+    description: "剪接位点注释表（02.mapping/junction_annotation/{sample}.junction.xls）"
+    producers: ["11.rMATS.junction_annotation"]
+    consumers: []
+  junction_annotation_txt:
+    description: "剪接位点注释日志文件（02.mapping/junction_annotation/{sample}.junction_annotation.txt，注意是 output 槽名为 log 的产物）"
+    producers: ["11.rMATS.junction_annotation"]
+    consumers: []
+  rmats_pair_summary:
+    description: "组间 rMATS 单 contrast 汇总（07.AS/rmats_pair/{contrast}/summary.txt）"
+    producers: ["11.rMATS.rmats_run"]
+    consumers: ["11.rMATS.merge_rmats_summary"]
+  rmats_pair_se_mats:
+    description: "组间 rMATS SE 事件表（07.AS/rmats_pair/{contrast}/SE.MATS.JC.txt；MXE/A5SS/A3SS/RI 同目录产生但未声明为 output）"
+    producers: ["11.rMATS.rmats_run"]
+    consumers: ["11.rMATS.merge_rmats_summary"]
+  rmats_pair_lib_check_log:
+    description: "组间 rMATS 文库类型校验日志（07.AS/rmats_pair/{contrast}/libType_check.log）"
+    producers: ["11.rMATS.rmats_run"]
+    consumers: []
+  rmats_pair_detail:
+    description: "跨 contrast rMATS 明细汇总（07.AS/rmats_pair/rmats_detail.txt）"
+    producers: ["11.rMATS.merge_rmats_summary"]
+    consumers: []
+  rmats_pair_summary_all:
+    description: "跨 contrast rMATS 总汇总（07.AS/rmats_pair/rmats_summary.txt）"
+    producers: ["11.rMATS.merge_rmats_summary"]
+    consumers: []
+  rmats_single_se:
+    description: "单样本 rMATS SE 事件表（07.AS/rmats_single/{sample}/SE.MATS.JC.txt，--statoff 模式）"
+    producers: ["11.rMATS.rmats_single_run"]
+    consumers: ["11.rMATS.merge_rmats_single_summary"]
+  rmats_single_mxe:
+    description: "单样本 rMATS MXE 事件表（07.AS/rmats_single/{sample}/MXE.MATS.JC.txt）"
+    producers: ["11.rMATS.rmats_single_run"]
+    consumers: []
+  rmats_single_summary:
+    description: "单样本 rMATS 汇总（07.AS/rmats_single/{sample}/summary.txt）"
+    producers: ["11.rMATS.rmats_single_run"]
+    consumers: ["11.rMATS.merge_rmats_single_summary"]
+  rmats_single_lib_check_log:
+    description: "单样本 rMATS 文库类型校验日志（07.AS/rmats_single/{sample}/libType_check.log）"
+    producers: ["11.rMATS.rmats_single_run"]
+    consumers: []
+  rmats_single_detail:
+    description: "跨样本单样本 rMATS 明细汇总（07.AS/rmats_single/rmats_detail.txt）"
+    producers: ["11.rMATS.merge_rmats_single_summary"]
+    consumers: []
+  rmats_single_summary_all:
+    description: "跨样本单样本 rMATS 总汇总（07.AS/rmats_single/rmats_summary.txt）"
+    producers: ["11.rMATS.merge_rmats_single_summary"]
+    consumers: []
+
+  # ========== 12.GeneFusion ==========
+  arriba_fusions_tsv:
+    description: "Arriba 基因融合检测结果（06.fusion/arriba/{sample}_fusions.tsv，交付产物）"
+    producers: ["12.GeneFusion.Arriba_Run"]
+    consumers: []
+  arriba_fusions_discarded_tsv:
+    description: "Arriba 被过滤的融合候选（06.fusion/arriba/{sample}_fusions.discarded.tsv）"
+    producers: ["12.GeneFusion.Arriba_Run"]
+    consumers: []
+  arriba_fusions_pdf:
+    description: "Arriba 融合可视化 PDF（06.fusion/arriba/{sample}_fusions.pdf；已声明为 output 但 shell 中 draw_fusions.R 被注释，实际不会产生，勿校验存在性）"
+    producers: ["12.GeneFusion.Arriba_Run"]
+    consumers: []
+
+  # ========== 13.deliver ==========
+  delivery_manifest_json:
+    description: "交付清单 JSON（{data_deliver}/delivery_manifest.json，rnaflow-cli deliver 产物，组织全部分析产物 + MD5）"
+    producers: ["13.deliver.delivery"]
+    consumers: ["13.deliver.delivery_report"]
+  delivery_manifest_md5:
+    description: "交付清单 MD5（{data_deliver}/delivery_manifest.md5）"
+    producers: ["13.deliver.delivery"]
+    consumers: ["13.deliver.delivery_report"]
+  delivery_details_log:
+    description: "交付明细日志（{data_deliver}/delivery_details.log）"
+    producers: ["13.deliver.delivery"]
+    consumers: ["13.deliver.delivery_report"]
+  report_delivery_manifest_json:
+    description: "报告专用交付清单 JSON（{data_deliver}/report_data/delivery_manifest.json，按 report.yaml 挑选报告所需文件）"
+    producers: ["13.deliver.delivery_report"]
+    consumers:
+      - "14.Report.generate_docker_json"
+      - "14.Report.Report"
+  report_delivery_manifest_md5:
+    description: "报告专用交付清单 MD5（{data_deliver}/report_data/delivery_manifest.md5）"
+    producers: ["13.deliver.delivery_report"]
+    consumers:
+      - "14.Report.generate_docker_json"
+      - "14.Report.Report"
+  report_delivery_details_log:
+    description: "报告专用交付明细日志（{data_deliver}/report_data/delivery_details.log）"
+    producers: ["13.deliver.delivery_report"]
+    consumers:
+      - "14.Report.generate_docker_json"
+      - "14.Report.Report"
+
+  # ========== 14.Report ==========
+  project_summary_json:
+    description: "报告项目摘要配置（{data_deliver}/report_data/project_summary.json，project_meta/stats/input_files，容器路径前缀 /data）"
+    producers: ["14.Report.generate_docker_json"]
+    consumers: ["14.Report.Report"]
+  analysis_report_html:
+    description: "最终分析报告（{data_deliver}/Analysis_Report/index.html，Quarto 容器化渲染，pipeline 终端交付物）"
+    producers: ["14.Report.Report"]
+    consumers: []
+
+  # ========== 全局收集器（snakefile ANALYSIS_TARGETS） ==========
+  analysis_targets:
+    description: "snakefile 全局收集器产物集合（AnalysisTargets 按启用模块动态展开的全部中间目标，无单一路径模板；仅 13.deliver / 14.Report 的聚合 rule 消费）"
+    producers: []
+    consumers:
+      - "13.deliver.delivery"
+      - "13.deliver.delivery_report"
+      - "14.Report.Report"

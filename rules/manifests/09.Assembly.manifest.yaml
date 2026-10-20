@@ -1,0 +1,172 @@
+module:
+  id: "09.Assembly"
+  title: "转录本组装与新异构体发现(StringTie 组装/合并 + gffcompare 注释 + 新转录本过滤)"
+  snakefile: "rules/09.Assembly.smk"
+  stage: "05.assembly"
+  summary: >
+    对 sort.bam 做参考引导的 StringTie 单样本转录本组装,合并为全样本统一转录本目录,
+    经 gffcompare 与参考注释比对打 class_code,最终过滤出高置信新转录本/新异构体 GTF。
+  requires_helpers: []
+
+rules:
+  - name: StringTie_Assembly
+    summary: "对单个样本的 sorted BAM 做参考引导的 StringTie 转录本组装"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: gtf
+        port: "reference_gff"
+        pattern: "{genome_gff}" # config['STAR_index'][Genome_Version]['genome_gff'],外部参考注释
+    outputs:
+      - name: gtf
+        port: "stringtie_gtf"
+        pattern: "05.assembly/stringtie/{sample}.gtf"
+        kind: intermediate
+    config_requires:
+      - key: "detect_novel_transcripts"
+        type: "boolean"
+        default: false
+        description: "是否启用新转录本检测/转录本组装模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule 取 [Genome_Version].genome_gff"
+      - key: "parameter.threads.stringtie"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 16
+        description: "StringTie 线程数"
+    conda: "envs/stringtie.yaml"
+    resources_tier: "high_resource"
+
+  - name: StringTie_Merge
+    summary: "合并全部样本的 StringTie GTF 为统一非冗余转录本目录(带长度/覆盖度/FPKM 过滤)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: gtfs
+        port: "stringtie_gtf"
+        pattern: "05.assembly/stringtie/{sample}.gtf"
+        expand_over: samples
+      - name: ref_gtf
+        port: "reference_gff"
+        pattern: "{genome_gff}"
+    outputs:
+      - name: merged_gtf
+        port: "stringtie_merged_gtf"
+        pattern: "05.assembly/stringtie/merged.gtf"
+        kind: intermediate
+      - name: gtf_list
+        port: "stringtie_mergelist"
+        pattern: "05.assembly/stringtie/mergelist.txt"
+        kind: intermediate
+    config_requires:
+      - key: "detect_novel_transcripts"
+        type: "boolean"
+        default: false
+        description: "是否启用新转录本检测/转录本组装模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule 取 [Genome_Version].genome_gff"
+      - key: "parameter.threads.stringtie"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 16
+        description: "StringTie 线程数"
+      - key: "parameter.stringtie.min_length"
+        type: "integer"
+        minimum: 1
+        default: 200
+        description: "合并时转录本最小长度(bp)"
+      - key: "parameter.stringtie.min_cov"
+        type: "number"
+        minimum: 0
+        default: 5
+        description: "合并时转录本最低 reads 覆盖度"
+      - key: "parameter.stringtie.min_fpkm"
+        type: "number"
+        minimum: 0
+        default: 1.0
+        description: "合并时转录本最低 FPKM 阈值"
+    conda: "envs/stringtie.yaml"
+    resources_tier: "high_resource"
+
+  - name: GffCompare
+    summary: "用 gffcompare 将合并转录本目录与参考注释比对,输出带 class_code 分类的注释 GTF 与统计"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: merged_gtf
+        port: "stringtie_merged_gtf"
+        pattern: "05.assembly/stringtie/merged.gtf"
+      - name: ref_gtf
+        port: "reference_gff"
+        pattern: "{genome_gff}"
+    outputs:
+      - name: annotated_gtf
+        port: "gffcompare_annotated_gtf"
+        pattern: "05.assembly/gffcompare/stringtie.annotated.gtf"
+        kind: intermediate
+      - name: stats
+        port: "gffcompare_stats"
+        pattern: "05.assembly/gffcompare/stringtie.stats"
+        kind: report
+      - name: tracking
+        port: "gffcompare_tracking"
+        pattern: "05.assembly/gffcompare/stringtie.tracking"
+        kind: intermediate
+    config_requires:
+      - key: "detect_novel_transcripts"
+        type: "boolean"
+        default: false
+        description: "是否启用新转录本检测/转录本组装模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule 取 [Genome_Version].genome_gff"
+    conda: "envs/gffcompare.yaml"
+    resources_tier: "high_resource"
+
+  - name: Filter_Novel_Transcripts
+    summary: "按 class_code('=' 与 'j')过滤 gffcompare 注释 GTF,产出高置信新转录本/新异构体 GTF(模块最终交付物)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: annotated_gtf
+        port: "gffcompare_annotated_gtf"
+        pattern: "05.assembly/gffcompare/stringtie.annotated.gtf"
+    outputs:
+      - name: novel_gtf
+        port: "novel_transcripts_gtf"
+        pattern: "05.assembly/filter/novel_transcripts.gtf"
+      - name: final_gtf
+        port: "final_novel_isoforms_gtf"
+        pattern: "05.assembly/filter/final_Novel_Isoforms.gtf"
+    config_requires:
+      - key: "detect_novel_transcripts"
+        type: "boolean"
+        default: false
+        description: "是否启用新转录本检测/转录本组装模块"
+    resources_tier: "low_resource"

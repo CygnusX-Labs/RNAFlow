@@ -1,0 +1,233 @@
+module:
+  id: "04.Contamination_check"
+  title: "污染筛查(fastq_screen + MultiQC)"
+  snakefile: "rules/04.Contamination_check.smk"
+  stage: "01.qc"
+  summary: >
+    由模板生成 fastq_screen 配置并校验数据库可达性,对 R1/R2 raw reads 分别做
+    多参考库污染筛查,再用 MultiQC 分方向聚合全样本结果。模块开关 fastq_screen。
+  requires_helpers: []
+
+rules:
+  - name: generate_fastq_screen_conf
+    summary: "用 fastq_screen_db_path 替换模板占位符,生成 01.qc/fastq_screen.conf(localrule)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: template
+        port: "fastq_screen_conf_template"
+        pattern: "{parameter.validate_fastq_screen.path_conf}"   # config 派生路径,仓库内 data/fastq_screen.conf_template
+      - name: db_path   # 实际在 params 中引用(config['fastq_screen_db_path']),非 .smk input 槽
+        port: "fastq_screen_db"
+        pattern: "{fastq_screen_db_path}"
+    outputs:
+      - name: conf
+        port: "fastq_screen_conf"
+        pattern: "01.qc/fastq_screen.conf"
+        kind: intermediate
+    config_requires:
+      - key: "fastq_screen"
+        type: "boolean"
+        default: true
+        description: "污染筛查模块开关(在目标生成层生效)"
+      - key: "parameter.validate_fastq_screen.path_conf"
+        type: "string"
+        description: "fastq_screen 配置模板路径(经 workflow.source_path 解析)"
+      - key: "fastq_screen_db_path"
+        type: "string"
+        description: "fastq_screen 污染筛查数据库根目录(来自 reference.yaml)"
+    resources_tier: "low_resource"   # localrule: True,threads 1,无 rule_resource profile
+
+  - name: check_fastq_screen_conf
+    summary: "校验 fastq_screen 配置格式与数据库可达性,产出模块内门控锚点"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: conf
+        port: "fastq_screen_conf"
+        pattern: "01.qc/fastq_screen.conf"
+      - name: db   # 校验脚本经 conf 间接检查数据库可达性,非 .smk input 槽
+        port: "fastq_screen_db"
+        pattern: "{fastq_screen_db_path}"
+    outputs:
+      - name: log   # 槽名与 .smk 一致(该 output 槽名就叫 log)
+        port: "fastq_screen_conf_check"
+        pattern: "01.qc/fastq_screen_config_check.log"
+        kind: intermediate
+    config_requires:
+      - key: "fastq_screen"
+        type: "boolean"
+        default: true
+        description: "污染筛查模块开关(在目标生成层生效)"
+      - key: "parameter.validate_fastq_screen.path"
+        type: "string"
+        description: "validate_fastq_screen.py 校验脚本路径(经 workflow.source_path 解析)"
+      - key: "fastq_screen_db_path"
+        type: "string"
+        description: "fastq_screen 污染筛查数据库根目录(校验可达性)"
+    conda: "envs/python3.yaml"
+    resources_tier: "low_resource"
+
+  - name: short_read_fastq_screen_r1
+    summary: "对单个样本的 R1 raw reads 做多参考库污染筛查(fastq_screen)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: md5_check
+        port: "md5_check"
+        pattern: "01.qc/md5_check.tsv"
+        role: gate
+      - name: log
+        port: "fastq_screen_conf_check"
+        pattern: "01.qc/fastq_screen_config_check.log"
+        role: gate
+      - name: conf
+        port: "fastq_screen_conf"
+        pattern: "01.qc/fastq_screen.conf"
+      - name: link_r1_dir   # 实际在 params 中引用,DAG 上经 md5_check 间接排序的事实依赖
+        port: "raw_fastq_r1"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R1.fq.gz"
+    outputs:
+      - name: fastq_screen_result
+        port: "fastq_screen_txt_r1"
+        pattern: "01.qc/fastq_screen_r1/{sample}_R1_screen.txt"
+        kind: intermediate
+    config_requires:
+      - key: "fastq_screen"
+        type: "boolean"
+        default: true
+        description: "污染筛查模块开关(在目标生成层生效)"
+      - key: "convert_md5"
+        type: "string"
+        default: "link_dir"
+        description: "标准化软链目录名(00.raw_data/ 下的子目录名)"
+      - key: "parameter.fastq_screen.subset"
+        type: "integer"
+        minimum: 1
+        default: 100000
+        description: "fastq_screen 抽样 reads 数(--subset)"
+      - key: "parameter.fastq_screen.aligner"
+        type: "string"
+        default: "bowtie2"
+        description: "fastq_screen 比对器(--aligner)"
+      - key: "parameter.threads.fastq_screen"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 10
+        description: "fastq_screen 线程数"
+    conda: "envs/fastq_screen.yaml"
+    resources_tier: "high_resource"
+
+  - name: short_read_fastq_screen_r2
+    summary: "对单个样本的 R2 raw reads 做多参考库污染筛查(fastq_screen)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: md5_check
+        port: "md5_check"
+        pattern: "01.qc/md5_check.tsv"
+        role: gate
+      - name: log
+        port: "fastq_screen_conf_check"
+        pattern: "01.qc/fastq_screen_config_check.log"
+        role: gate
+      - name: conf
+        port: "fastq_screen_conf"
+        pattern: "01.qc/fastq_screen.conf"
+      - name: link_r2_dir   # 实际在 params 中引用,DAG 上经 md5_check 间接排序的事实依赖
+        port: "raw_fastq_r2"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R2.fq.gz"
+    outputs:
+      - name: fastq_screen_result
+        port: "fastq_screen_txt_r2"
+        pattern: "01.qc/fastq_screen_r2/{sample}_R2_screen.txt"
+        kind: intermediate
+    config_requires:
+      - key: "fastq_screen"
+        type: "boolean"
+        default: true
+        description: "污染筛查模块开关(在目标生成层生效)"
+      - key: "convert_md5"
+        type: "string"
+        default: "link_dir"
+        description: "标准化软链目录名(00.raw_data/ 下的子目录名)"
+      - key: "parameter.fastq_screen.subset"
+        type: "integer"
+        minimum: 1
+        default: 100000
+        description: "fastq_screen 抽样 reads 数(--subset)"
+      - key: "parameter.fastq_screen.aligner"
+        type: "string"
+        default: "bowtie2"
+        description: "fastq_screen 比对器(--aligner)"
+      - key: "parameter.threads.fastq_screen"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 10
+        description: "fastq_screen 线程数"
+    conda: "envs/fastq_screen.yaml"
+    resources_tier: "high_resource"
+
+  - name: fastq_screen_multiqc_r1
+    summary: "聚合全部样本 R1 污染筛查结果为一份 MultiQC 报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: fastqc_files_r1
+        port: "fastq_screen_txt_r1"
+        pattern: "01.qc/fastq_screen_r1/{sample}_R1_screen.txt"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "fastq_screen_multiqc_r1_report"
+        pattern: "01.qc/fastq_screen_multiqc_r1/multiqc_r1_fastq_screen_report.html"
+        kind: report
+    config_requires:
+      - key: "fastq_screen"
+        type: "boolean"
+        default: true
+        description: "污染筛查模块开关(在目标生成层生效)"
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: fastq_screen_multiqc_r2
+    summary: "聚合全部样本 R2 污染筛查结果为一份 MultiQC 报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: fastqc_files_r1   # 槽名与 .smk 原文一致(smk 笔误,R2 rule 的槽名也叫 fastqc_files_r1,实际收集 R2 文件)
+        port: "fastq_screen_txt_r2"
+        pattern: "01.qc/fastq_screen_r2/{sample}_R2_screen.txt"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "fastq_screen_multiqc_r2_report"
+        pattern: "01.qc/fastq_screen_multiqc_r2/multiqc_r2_fastq_screen_report.html"
+        kind: report
+    config_requires:
+      - key: "fastq_screen"
+        type: "boolean"
+        default: true
+        description: "污染筛查模块开关(在目标生成层生效)"
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"

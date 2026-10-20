@@ -1,0 +1,103 @@
+module:
+  id: "13.deliver"
+  title: "数据交付(rnaflow-cli,全量交付 + 报告专用交付)"
+  snakefile: "rules/13.deliver.smk"
+  stage: "deliver"
+  summary: >
+    调用 Rust 工具 rnaflow-cli 将全部分析产物按配置组织到交付目录,
+    生成带 MD5 校验的交付清单;另有报告专用交付,只挑选报告所需文件到 report_data/。
+  requires_helpers: ["utils.common", "utils.datadeliver"]
+
+rules:
+  - name: delivery
+    summary: "组织全部启用模块的分析产物到交付目录,生成 delivery_manifest.json/md5 与明细日志"
+    wildcards: []
+    dynamic: true
+    per_sample: false
+    inputs:
+      - name: analysis_targets  # .smk 中为匿名 input:ANALYSIS_TARGETS(snakefile 全局收集器,按启用模块展开全部上游产物,无单一路径模板)
+        port: "analysis_targets"  # ⚠ 聚合端口,ports.yaml 尚未登记,需注册表 Owner 补登
+        pattern: "{workflow}"  # 收集器动态展开 config['workflow'] 工作区下全部启用模块产物,动态 I/O 以 dynamic: true 声明
+    outputs:
+      - name: manifest_json
+        port: "delivery_manifest_json"
+        pattern: "{data_deliver}/delivery_manifest.json"
+      - name: manifest_md5
+        port: "delivery_manifest_md5"
+        pattern: "{data_deliver}/delivery_manifest.md5"
+      - name: manifest_log
+        port: "delivery_details_log"
+        pattern: "{data_deliver}/delivery_details.log"
+    config_requires:
+      - key: "deliver"
+        type: "boolean"
+        default: true
+        description: "数据交付模块开关(false 时交付目标不进 rule all)"
+      - key: "data_deliver"
+        type: "string"
+        description: "交付输出根目录(由 CLI --analysisyaml 注入,无默认值)"
+      - key: "workflow"
+        type: "string"
+        description: "分析工作区目录(rnaflow-cli -d 的源目录,由 CLI --analysisyaml 注入)"
+      - key: "parameter.RNAFlow_Deliver_Tool.config_path"
+        type: "string"
+        default: "../src/src/data-deliver/RNAFlow_Deliver_Tool/config/full_delivery_config.yaml"
+        description: "全量交付配置文件(经 workflow.source_path 解析)"
+      - key: "parameter.threads.rnaflow-cli"
+        type: "integer"
+        minimum: 1
+        default: 8
+        description: "rnaflow-cli 交付线程数"
+    conda: "envs/py3.12.yaml"
+    resources_tier: "high_resource"
+
+  - name: delivery_report
+    summary: "按 report.yaml 配置只挑选报告所需文件,交付到 {data_deliver}/report_data/ 子目录"
+    wildcards: []
+    dynamic: true
+    per_sample: false
+    inputs:
+      - name: analysis_targets  # .smk 中为匿名 input:ANALYSIS_TARGETS(全局收集器,同 delivery rule)
+        port: "analysis_targets"  # ⚠ 聚合端口,ports.yaml 尚未登记,需注册表 Owner 补登
+        pattern: "{workflow}"
+      - name: manifest_json
+        port: "delivery_manifest_json"
+        pattern: "{data_deliver}/delivery_manifest.json"
+      - name: manifest_md5
+        port: "delivery_manifest_md5"
+        pattern: "{data_deliver}/delivery_manifest.md5"
+      - name: manifest_log
+        port: "delivery_details_log"
+        pattern: "{data_deliver}/delivery_details.log"
+    outputs:
+      - name: manifest_json
+        port: "report_delivery_manifest_json"
+        pattern: "{data_deliver}/report_data/delivery_manifest.json"
+      - name: manifest_md5
+        port: "report_delivery_manifest_md5"
+        pattern: "{data_deliver}/report_data/delivery_manifest.md5"
+      - name: manifest_log
+        port: "report_delivery_details_log"
+        pattern: "{data_deliver}/report_data/delivery_details.log"
+    config_requires:
+      - key: "report"
+        type: "boolean"
+        default: true
+        description: "报告模块开关(false 时报告相关交付目标不进 rule all)"
+      - key: "data_deliver"
+        type: "string"
+        description: "交付输出根目录(由 CLI --analysisyaml 注入,无默认值)"
+      - key: "workflow"
+        type: "string"
+        description: "分析工作区目录(rnaflow-cli -d 的源目录,由 CLI --analysisyaml 注入)"
+      - key: "parameter.RNAFlow_Deliver_Tool.config_path_report"
+        type: "string"
+        default: "../src/src/data-deliver/RNAFlow_Deliver_Tool/config/report.yaml"
+        description: "报告专用交付配置文件(经 workflow.source_path 解析)"
+      - key: "parameter.threads.rnaflow-cli"
+        type: "integer"
+        minimum: 1
+        default: 8
+        description: "rnaflow-cli 交付线程数"
+    conda: "envs/py3.12.yaml"
+    resources_tier: "high_resource"

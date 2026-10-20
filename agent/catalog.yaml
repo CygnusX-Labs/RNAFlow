@@ -1,0 +1,144 @@
+# agent/catalog.yaml —— Agent 回答「我要 X 结果」时的查询入口;中间产物(bam、trimmed fq 等)不进本文件
+# synonyms: 同义词表(防漏召回:用户措辞与条目名不一致时也能命中)
+# 每个 target 均已逐条核对能被某条 rule 的 output pattern 匹配(validate.ts error 级校验);
+# {data_deliver} 为 CLI --analysisyaml 注入的交付根目录占位,{sample} 为样本占位。
+deliverables:
+  - id: raw_multiqc
+    name: "原始数据 MultiQC 质控报告(R1/R2)"
+    description: "全部样本原始 reads 的 FastQC 聚合报告,R1/R2 各一份,评估原始数据质量、接头污染、批次异常"
+    targets:
+      - "01.qc/short_read_r1_multiqc/multiqc_r1_raw-data_report.html"
+      - "01.qc/short_read_r2_multiqc/multiqc_r2_raw-data_report.html"
+    keywords: ["质控", "QC", "fastqc", "multiqc", "原始数据", "raw", "质量评估", "质检报告"]
+    synonyms: ["质检", "质量控制", "原始数据质控", "raw qc", "测序质量", "数据质量报告", "quality control"]
+  - id: fastq_screen_multiqc
+    name: "fastq_screen 污染筛查报告(R1/R2)"
+    description: "全部样本原始 reads 多参考库污染筛查的 MultiQC 聚合报告,R1/R2 各一份(需 fastq_screen 开关开启,默认开)"
+    targets:
+      - "01.qc/fastq_screen_multiqc_r1/multiqc_r1_fastq_screen_report.html"
+      - "01.qc/fastq_screen_multiqc_r2/multiqc_r2_fastq_screen_report.html"
+    keywords: ["污染筛查", "fastq_screen", "污染", "multiqc", "物种污染", "外源污染"]
+    synonyms: ["污染检测", "污染检查", "混样检查", "交叉污染", "contamination", "污染源分析"]
+  - id: clean_multiqc
+    name: "清洗后 fastp MultiQC 报告"
+    description: "全部样本 fastp 去接头/质量过滤结果的 MultiQC 聚合报告,评估清洗前后 reads 数与质量变化"
+    targets:
+      - "01.qc/multiqc_short_read_trim/multiqc_short_read_trim_report.html"
+    keywords: ["清洗", "fastp", "去接头", "multiqc", "clean", "过滤", "trim"]
+    synonyms: ["清洗质控", "数据清洗报告", "过滤报告", "clean qc", "去接头报告", "trimming 报告"]
+  - id: merge_qc_report
+    name: "QC 汇总报告(预处理总报告)"
+    description: "跨模块聚合 raw FastQC 与 fastp 清洗结果的预处理总 MultiQC 报告(merge_qc_report)"
+    targets:
+      - "01.qc/multiqc_merge_qc/multiqc_merge_qc_report.html"
+    keywords: ["QC 汇总", "质控汇总", "预处理", "multiqc", "总报告", "质控总览"]
+    synonyms: ["质控总结", "汇总质控报告", "预处理报告", "QC 总报告", "merge qc", "整体质控"]
+  - id: mapping_multiqc
+    name: "mapping 比对质控报告"
+    description: "聚合全部样本 STAR 比对率、Qualimap、samtools、TIN、geneBody、read_distribution 的 mapping 模块 MultiQC 总报告"
+    targets:
+      - "02.mapping/mapping_report/multiqc_mapping_report.html"
+    keywords: ["比对", "mapping", "比对率", "STAR", "multiqc", "比对质控", "mapping qc"]
+    synonyms: ["比对报告", "比对统计", "mapping 报告", "比对质量", "alignment 报告", "mapping_report"]
+  - id: rsem_multiqc
+    name: "RSEM 定量 QC 报告"
+    description: "全部样本 RSEM 定量统计(.cnt)的 MultiQC 聚合报告,评估定量可比对率与 reads 分配"
+    targets:
+      - "03.count/multiqc_rsem_report.html"
+    keywords: ["RSEM", "定量", "定量质控", "multiqc", "表达定量 QC"]
+    synonyms: ["定量报告", "定量统计", "rsem 报告", "定量质量报告", "count qc"]
+  - id: rsem_expression_matrices
+    name: "RSEM 表达定量矩阵(TPM/counts/FPKM)"
+    description: "全样本合并的三张基因表达矩阵:TPM、counts、FPKM,是差异分析等下游分析的主输入"
+    targets:
+      - "03.count/merge_rsem_tpm.tsv"
+      - "03.count/merge_rsem_counts.tsv"
+      - "03.count/merge_rsem_fpkm.tsv"
+    keywords: ["定量矩阵", "表达矩阵", "TPM", "FPKM", "counts", "count 表", "RSEM", "表达量"]
+    synonyms: ["表达量矩阵", "基因表达矩阵", "表达量表", "counts 矩阵", "count 矩阵", "定量结果", "表达谱", "expression matrix"]
+  - id: deg_results
+    name: "DEG 差异表达分析结果(DESeq2)"
+    description: "全部 contrast 的 DESeq2 差异表达分析统计总表(显著差异基因、log2FC、p-value);另有表达分布图与高变基因热图在 06.DEG/ 下"
+    targets:
+      - "06.DEG/DESEQ2/All_Contrast_DEG_Statistics.csv"
+    keywords: ["差异分析", "DEG", "差异基因", "DESeq2", "差异表达", "差异表达基因"]
+    synonyms: ["差异基因分析", "差异表达分析", "差异基因列表", "上下调基因", "差异结果", "differential expression", "deg 表"]
+  - id: go_enrichment
+    name: "GO 富集分析结果"
+    description: "对全部 contrast 差异基因做的 GO 富集分析结果目录(07.Enrichments/,含各 contrast 富集表与图)"
+    targets:
+      - "07.Enrichments"
+    keywords: ["富集分析", "GO", "GO 富集", "功能富集", "富集结果", "通路富集"]
+    synonyms: ["go 分析", "富集", "功能注释", "GO 注释", "基因功能分析", "enrichment", "go 条目"]
+  - id: rmats_pair_summary
+    name: "rMATS 组间差异可变剪接汇总"
+    description: "跨 contrast 汇总的组间差异可变剪接结果:明细表 rmats_detail.txt 与总览表 rmats_summary.txt(需 rmats 开关开启,默认开)"
+    targets:
+      - "07.AS/rmats_pair/rmats_detail.txt"
+      - "07.AS/rmats_pair/rmats_summary.txt"
+    keywords: ["可变剪接", "rMATS", "差异剪接", "剪接", "组间剪接", "AS"]
+    synonyms: ["可变剪切", "选择性剪接", "差异可变剪接", "剪接分析", "剪接事件", "alternative splicing", "rmats 结果"]
+  - id: rmats_single_summary
+    name: "rMATS 单样本剪接事件汇总"
+    description: "跨样本汇总的单样本模式 rMATS 五类剪接事件检测结果:明细表与总览表"
+    targets:
+      - "07.AS/rmats_single/rmats_detail.txt"
+      - "07.AS/rmats_single/rmats_summary.txt"
+    keywords: ["可变剪接", "rMATS", "单样本剪接", "剪接事件", "AS"]
+    synonyms: ["可变剪切", "选择性剪接", "单样本剪接分析", "剪接检测", "alternative splicing"]
+  - id: circrna_results
+    name: "circRNA 鉴定结果(CIRCexplorer2)"
+    description: "单样本 circRNA 鉴定与注释结果:back_spliced_junction.bed 与 circularRNA_known.txt(随 rmats 模块开关)"
+    targets:
+      - "02.mapping/CIRCexplorer2/{sample}/back_spliced_junction.bed"
+      - "02.mapping/CIRCexplorer2/{sample}/circularRNA_known.txt"
+    keywords: ["circRNA", "环状RNA", "环形RNA", "circrna 鉴定", "CIRCexplorer2"]
+    synonyms: ["环状 RNA 鉴定", "环状 RNA 检测", "circRNA 检测", "circ 结果", "环状 RNA 注释", "circular rna"]
+  - id: gene_fusion_results
+    name: "基因融合检测结果(Arriba)"
+    description: "单样本 Arriba 基因融合检测:高置信融合列表 _fusions.tsv 与被过滤候选 _fusions.discarded.tsv(需 gene_fusion 开关,默认关)"
+    targets:
+      - "06.fusion/arriba/{sample}_fusions.tsv"
+      - "06.fusion/arriba/{sample}_fusions.discarded.tsv"
+    keywords: ["基因融合", "融合基因", "fusion", "Arriba", "融合检测"]
+    synonyms: ["融合基因检测", "融合事件", "融合结果", "gene fusion", "融合分析", "融合基因列表"]
+  - id: variant_calls
+    name: "变异检测结果(GATK PASS VCF)"
+    description: "单样本 GATK 过滤后 PASS 高置信 SNP/indel VCF,及全样本 PASS 变异 bcftools 统计 MultiQC 报告(需 call_variant 开关,默认关)"
+    targets:
+      - "04.variant/gatk/{sample}/{sample}.final.pass.vcf"
+      - "04.variant/multiqc_gatk_bcftools_stats_pass/multiqc_gatk_bcftools_stats_pass.html"
+    keywords: ["变异检测", "VCF", "SNP", "indel", "变异", "GATK", "突变"]
+    synonyms: ["变异分析", "突变检测", "变异结果", "snp 检测", "变异 calling", "variant calling", "点突变", "vcf 文件"]
+  - id: novel_transcripts
+    name: "StringTie 转录本组装与新转录本结果"
+    description: "StringTie 组装+gffcompare 注释后过滤出的高置信新转录本/新异构体 GTF 及组装统计(需 detect_novel_transcripts 开关,默认关)"
+    targets:
+      - "05.assembly/filter/novel_transcripts.gtf"
+      - "05.assembly/filter/final_Novel_Isoforms.gtf"
+      - "05.assembly/gffcompare/stringtie.stats"
+    keywords: ["新转录本", "转录本组装", "StringTie", "新异构体", "组装", "novel transcript"]
+    synonyms: ["新转录本鉴定", "转录组组装", "新异构体发现", "novel isoform", "新转录本检测", "组装结果", "novel_transcripts"]
+  - id: delivery_package
+    name: "交付数据包(delivery_manifest)"
+    description: "rnaflow-cli 按交付规范组织到交付目录的全部结果文件,含带 MD5 校验的交付清单与明细日志"
+    targets:
+      - "{data_deliver}/delivery_manifest.json"
+      - "{data_deliver}/delivery_manifest.md5"
+      - "{data_deliver}/delivery_details.log"
+    keywords: ["交付", "deliver", "数据交付", "打包", "交付清单", "manifest", "交付目录"]
+    synonyms: ["结果打包", "交付结果", "交付文件", "数据打包", "交付数据", "delivery", "交付包", "全部结果"]
+  - id: analysis_report_html
+    name: "最终分析报告 HTML"
+    description: "容器化 Quarto 渲染的最终交互式 HTML 分析报告(Analysis_Report/index.html)"
+    targets:
+      - "{data_deliver}/Analysis_Report/index.html"
+    keywords: ["报告", "分析报告", "HTML 报告", "最终报告", "结题报告", "网页报告"]
+    synonyms: ["分析报告", "项目报告", "结果报告", "报告 html", "交互式报告", "analysis report", "总报告"]
+  - id: project_summary_json
+    name: "project_summary.json 报告配置"
+    description: "报告系统生成的项目汇总配置:项目元信息、样本统计、报告输入文件清单(report_data/project_summary.json)"
+    targets:
+      - "{data_deliver}/report_data/project_summary.json"
+    keywords: ["project_summary", "项目汇总", "报告配置", "项目信息", "样本统计"]
+    synonyms: ["项目摘要", "项目总结", "summary json", "项目概况", "报告数据配置"]

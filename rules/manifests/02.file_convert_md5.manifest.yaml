@@ -1,0 +1,92 @@
+module:
+  id: "02.file_convert_md5"
+  title: "原始数据标准化软链与 MD5 校验(入口/门控模块)"
+  snakefile: "rules/02.file_convert_md5.smk"
+  stage: "00.raw_data"
+  summary: >
+    将 raw_data_path 下的原始 FASTQ 按样本标准化软链到 00.raw_data/link_dir/,
+    生成 MD5 审计 JSON,再由 check_md5 全量校验,产出全 pipeline 的门控锚点
+    01.qc/md5_check.tsv。模块无 conda,依赖两个外部编译二进制。
+  requires_helpers: ["utils.common"]
+
+rules:
+  - name: seq_preprocessor
+    summary: "把原始 FASTQ 标准化软链到 00.raw_data/link_dir/ 并生成 MD5 审计 JSON(一次处理全部样本)"
+    wildcards: []
+    dynamic: true   # input 由 get_all_input_dirs() 函数收集展开,无法静态断言
+    per_sample: false
+    inputs:
+      - name: md5
+        port: "raw_fastq_dir"
+        pattern: "{raw_data_path}/{sample}"   # 用户原始数据目录,经 get_all_input_dirs 收集去重
+        expand_over: samples
+    outputs:
+      - name: md5_check
+        port: "raw_fastq_link_dir"
+        pattern: "00.raw_data/link_dir"   # directory() 输出,写目录路径
+        kind: intermediate
+      - name: md5_check_json
+        port: "raw_data_md5_json"
+        pattern: "00.raw_data/link_dir/raw_data_md5.json"
+        kind: intermediate
+      - name: link_r1
+        port: "raw_fastq_r1"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R1.fq.gz"
+        expand_over: samples
+      - name: link_r2
+        port: "raw_fastq_r2"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R2.fq.gz"
+        expand_over: samples
+    config_requires:
+      - key: "raw_data_path"
+        type: "array"
+        description: "用户原始测序数据目录列表,每项为含 <sample>/ 子目录或 <sample>* 文件的 base 目录"
+      - key: "convert_md5"
+        type: "string"
+        default: "link_dir"
+        description: "标准化软链目录名(00.raw_data/ 下的子目录名)"
+      - key: "raw_data.md5"
+        type: "string"
+        description: "原始数据自带 MD5 文件名(--md5-name 参数)"
+      - key: "software.seq_preprocessor"
+        type: "string"
+        description: "seq_preprocessor 外部二进制路径(经 workflow.source_path 解析)"
+    resources_tier: "high_resource"
+
+  - name: check_md5
+    summary: "对全部样本软链文件重算 MD5 并与审计 JSON 比对,产出门控文件 01.qc/md5_check.tsv"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: md5_check_json
+        port: "raw_data_md5_json"
+        pattern: "00.raw_data/link_dir/raw_data_md5.json"
+      - name: link_r1
+        port: "raw_fastq_r1"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R1.fq.gz"
+        expand_over: samples
+      - name: link_r2
+        port: "raw_fastq_r2"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R2.fq.gz"
+        expand_over: samples
+    outputs:
+      - name: md5_check
+        port: "md5_check"
+        pattern: "01.qc/md5_check.tsv"   # 全 pipeline 读原始数据 rule 的门控锚点
+        kind: intermediate
+    config_requires:
+      - key: "convert_md5"
+        type: "string"
+        default: "link_dir"
+        description: "标准化软链目录名(00.raw_data/ 下的子目录名)"
+      - key: "software.json_md5_verifier"
+        type: "string"
+        description: "json_md5_verifier 外部二进制路径(经 workflow.source_path 解析)"
+      - key: "parameter.threads.json_md5_verifier"
+        type: "integer"
+        minimum: 1
+        maximum: 128
+        default: 40
+        description: "MD5 校验线程数"
+    resources_tier: "high_resource"

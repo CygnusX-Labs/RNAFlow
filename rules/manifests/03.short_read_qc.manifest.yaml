@@ -1,0 +1,132 @@
+module:
+  id: "03.short_read_qc"
+  title: "原始短读长质控(FastQC + MultiQC)"
+  snakefile: "rules/03.short_read_qc.smk"
+  stage: "01.qc"
+  summary: >
+    对原始 R1/R2 reads 分别运行 FastQC,并用 MultiQC 分方向聚合全部样本报告,
+    为下游去接头/质控决策提供依据。
+  requires_helpers: []
+
+rules:
+  - name: short_read_qc_r1
+    summary: "对单个样本的 R1 原始 reads 运行 FastQC"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: md5_check
+        port: "md5_check"
+        pattern: "01.qc/md5_check.tsv"
+        role: gate
+      - name: link_r1_dir
+        port: "raw_fastq_r1"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R1.fq.gz"
+    outputs:
+      - name: r1_html
+        port: "fastqc_html_r1"
+        pattern: "01.qc/short_read_qc_r1/{sample}_R1_fastqc.html"
+        kind: report
+      - name: r1_zip
+        port: "fastqc_zip_r1"
+        pattern: "01.qc/short_read_qc_r1/{sample}_R1_fastqc.zip"
+        kind: intermediate
+    config_requires:
+      - key: "convert_md5"
+        type: "string"
+        default: "link_dir"
+        description: "标准化软链目录名(00.raw_data/ 下的子目录名)"
+      - key: "parameter.threads.fastqc"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 1
+        description: "FastQC 线程数"
+    conda: "envs/fastqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: short_read_qc_r2
+    summary: "对单个样本的 R2 原始 reads 运行 FastQC"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: md5_check
+        port: "md5_check"
+        pattern: "01.qc/md5_check.tsv"
+        role: gate
+      - name: link_r2_dir
+        port: "raw_fastq_r2"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R2.fq.gz"
+    outputs:
+      - name: r2_html
+        port: "fastqc_html_r2"
+        pattern: "01.qc/short_read_qc_r2/{sample}_R2_fastqc.html"
+        kind: report
+      - name: r2_zip
+        port: "fastqc_zip_r2"
+        pattern: "01.qc/short_read_qc_r2/{sample}_R2_fastqc.zip"
+        kind: intermediate
+    config_requires:
+      - key: "convert_md5"
+        type: "string"
+        default: "link_dir"
+        description: "标准化软链目录名(00.raw_data/ 下的子目录名)"
+      - key: "parameter.threads.fastqc"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 1
+        description: "FastQC 线程数"
+    conda: "envs/fastqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: short_read_multiqc_r1
+    summary: "聚合全部样本 R1 FastQC 结果为一份 MultiQC 报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: fastqc_files_r1
+        port: "fastqc_zip_r1"
+        pattern: "01.qc/short_read_qc_r1/{sample}_R1_fastqc.zip"
+        expand_over: samples
+    outputs:
+      - name: report_dir   # 槽名与 .smk 一致(smk 中输出文件槽就叫 report_dir)
+        port: "multiqc_raw_r1_report"
+        pattern: "01.qc/short_read_r1_multiqc/multiqc_r1_raw-data_report.html"
+        kind: report
+    config_requires:
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: short_read_multiqc_r2
+    summary: "聚合全部样本 R2 FastQC 结果为一份 MultiQC 报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: fastqc_files_r2
+        port: "fastqc_zip_r2"
+        pattern: "01.qc/short_read_qc_r2/{sample}_R2_fastqc.zip"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "multiqc_raw_r2_report"
+        pattern: "01.qc/short_read_r2_multiqc/multiqc_r2_raw-data_report.html"
+        kind: report
+    config_requires:
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"

@@ -1,0 +1,112 @@
+module:
+  id: "14.Report"
+  title: "最终分析报告生成(容器化 Quarto 渲染)"
+  snakefile: "rules/14.Report.smk"
+  stage: "report"
+  summary: >
+    先生成 project_summary.json 报告配置(项目元信息/样本统计/容器内输入文件路径),
+    再通过 docker/apptainer/singularity 容器化运行 Quarto 镜像,
+    产出最终交互式 HTML 分析报告 Analysis_Report/index.html。
+  requires_helpers: ["utils.common"]
+
+rules:
+  - name: generate_docker_json
+    summary: "读取样本表与报告专用交付清单,生成容器化报告系统所需的 project_summary.json 配置"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: manifest_json
+        port: "report_delivery_manifest_json"
+        pattern: "{data_deliver}/report_data/delivery_manifest.json"
+      - name: manifest_md5
+        port: "report_delivery_manifest_md5"
+        pattern: "{data_deliver}/report_data/delivery_manifest.md5"
+      - name: manifest_log
+        port: "report_delivery_details_log"
+        pattern: "{data_deliver}/report_data/delivery_details.log"
+      - name: sample_sheet
+        port: "sample_sheet"
+        pattern: "{sample_csv}"
+    outputs:
+      - name: json_file
+        port: "project_summary_json"
+        pattern: "{data_deliver}/report_data/project_summary.json"
+        kind: intermediate
+    config_requires:
+      - key: "report"
+        type: "boolean"
+        default: true
+        description: "报告模块开关(false 时报告目标不进 rule all)"
+      - key: "data_deliver"
+        type: "string"
+        description: "交付输出根目录(由 CLI --analysisyaml 注入,无默认值)"
+      - key: "sample_csv"
+        type: "string"
+        description: "样本信息表 CSV 路径(列 sample/sample_name/group,由 CLI --analysisyaml 注入)"
+      - key: "client"
+        type: "string"
+        description: "客户名称,写入报告项目元信息(由 CLI --analysisyaml 注入)"
+      - key: "species"
+        type: "string"
+        description: "物种,写入报告项目元信息(由 CLI --analysisyaml 注入)"
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本,写入报告项目元信息(由 CLI --analysisyaml 注入)"
+      - key: "pipeline_version"
+        type: "string"
+        default: "0.1.9"
+        description: "流程版本号,写入报告项目元信息"
+    conda: "envs/py3.12.yaml"
+    resources_tier: "low_resource"
+
+  - name: Report
+    summary: "按 report_engine 探测容器引擎,运行 Quarto 镜像渲染最终交互式 HTML 分析报告"
+    wildcards: []
+    dynamic: true
+    per_sample: false
+    inputs:
+      - name: analysis_targets  # .smk 中为匿名 input:ANALYSIS_TARGETS(snakefile 全局收集器,按启用模块展开全部上游产物,无单一路径模板)
+        port: "analysis_targets"  # ⚠ 聚合端口,ports.yaml 尚未登记,需注册表 Owner 补登
+        pattern: "{workflow}"  # 收集器动态展开 config['workflow'] 工作区下全部启用模块产物,动态 I/O 以 dynamic: true 声明
+      - name: json_file
+        port: "project_summary_json"
+        pattern: "{data_deliver}/report_data/project_summary.json"
+      - name: manifest_json
+        port: "report_delivery_manifest_json"
+        pattern: "{data_deliver}/report_data/delivery_manifest.json"
+      - name: manifest_md5
+        port: "report_delivery_manifest_md5"
+        pattern: "{data_deliver}/report_data/delivery_manifest.md5"
+      - name: manifest_log
+        port: "report_delivery_details_log"
+        pattern: "{data_deliver}/report_data/delivery_details.log"
+    outputs:
+      - name: Report_html
+        port: "analysis_report_html"
+        pattern: "{data_deliver}/Analysis_Report/index.html"
+        kind: report
+    config_requires:
+      - key: "report"
+        type: "boolean"
+        default: true
+        description: "报告模块开关(false 时报告目标不进 rule all)"
+      - key: "data_deliver"
+        type: "string"
+        description: "交付输出根目录(report_data/data 与 Analysis_Report 挂载源,由 CLI --analysisyaml 注入)"
+      - key: "parameter.Report.docker_version"
+        type: "string"
+        default: "bioreportrna:v0.0.7"
+        description: "报告容器镜像(需本地已存在,docker 模式下镜像缺失会直接报错)"
+      - key: "report_engine"
+        type: "string"
+        enum: ["auto", "docker", "apptainer", "singularity"]
+        default: "auto"
+        description: "报告容器引擎;auto 按 docker→apptainer→singularity 顺序探测"
+      - key: "parameter.threads.Report"
+        type: "integer"
+        minimum: 1
+        default: 10
+        description: "Report 渲染线程数"
+    conda: "envs/py3.12.yaml"
+    resources_tier: "high_resource"

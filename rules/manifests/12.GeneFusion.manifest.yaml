@@ -1,0 +1,52 @@
+module:
+  id: "12.GeneFusion"
+  title: "基因融合检测(Arriba)"
+  snakefile: "rules/12.GeneFusion.smk"
+  stage: "06.fusion"
+  summary: >
+    基于 STAR 比对 BAM(含嵌合 reads)用 Arriba 做单样本基因融合检测,
+    输出高置信融合列表与被过滤候选;带植物基因组优化参数(-D 0)。
+    注意:产物落在 06.fusion/,与模块号不对应。
+  requires_helpers: []
+
+rules:
+  - name: Arriba_Run
+    summary: "对单样本运行 Arriba 检测基因融合事件(高置信 + 被过滤候选两张表)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam  # 需含 Chimeric reads 的 BAM(STAR WithinBAM 模式)
+        port: sorted_bam
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: fasta
+        port: genome_fasta
+        pattern: "{genome_fasta}"  # 外部参考:config['STAR_index'][Genome_Version]['genome_fa']
+      - name: gtf
+        port: reference_gtf
+        pattern: "{reference_gtf}"  # 外部参考:config['STAR_index'][Genome_Version]['genome_gtf']
+    outputs:
+      - name: fusions
+        port: arriba_fusions_tsv
+        pattern: "06.fusion/arriba/{sample}_fusions.tsv"
+      - name: discarded
+        port: arriba_fusions_discarded_tsv
+        pattern: "06.fusion/arriba/{sample}_fusions.discarded.tsv"
+      - name: plot
+        port: arriba_fusions_pdf
+        pattern: "06.fusion/arriba/{sample}_fusions.pdf"
+        optional: true  # 已声明为 output,但 shell 中生成它的 draw_fusions.R 被注释,实际不会产生,勿校验存在性
+        kind: report
+    config_requires:
+      - key: gene_fusion
+        type: boolean
+        default: true
+        description: "基因融合检测模块开关(false 时裁剪本模块全部目标)"
+      - key: Genome_Version
+        type: string
+        description: "参考基因组版本名(索引 STAR_index 子键)"
+      - key: STAR_index
+        type: object
+        description: "参考资源索引;本 rule 使用 STAR_index[Genome_Version].genome_fa 与 .genome_gtf"
+    conda: "envs/arriba.yaml"
+    resources_tier: "low_resource"  # .smk 无 rule_resource 块;threads 硬编码 1,注释说明单核即可(I/O 瓶颈)

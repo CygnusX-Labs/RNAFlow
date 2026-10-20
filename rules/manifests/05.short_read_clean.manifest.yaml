@@ -1,0 +1,154 @@
+module:
+  id: "05.short_read_clean"
+  title: "短读长清洗(fastp 去接头+质量过滤,MultiQC 聚合)"
+  snakefile: "rules/05.short_read_clean.smk"
+  stage: "01.qc"
+  summary: >
+    用 fastp 对原始双端 reads 做去接头与质量过滤,产出供全部下游比对使用的
+    clean FASTQ;并用 MultiQC 分别聚合 trim 阶段报告与 raw+trim 预处理总报告。
+  requires_helpers: []
+
+rules:
+  - name: short_read_fastp
+    summary: "对单个样本双端 reads 运行 fastp 去接头与质量过滤,产出 clean FASTQ"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: md5_check
+        port: "md5_check"
+        pattern: "01.qc/md5_check.tsv"
+        role: gate
+      - name: link_r1_dir
+        port: "raw_fastq_r1"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R1.fq.gz"
+        config_keys: ["convert_md5"]  # 路径中段取自 config['convert_md5'](默认 link_dir)
+      - name: link_r2_dir
+        port: "raw_fastq_r2"
+        pattern: "00.raw_data/link_dir/{sample}/{sample}_R2.fq.gz"
+        config_keys: ["convert_md5"]
+    outputs:
+      - name: r1_trimmed
+        port: "trimmed_fastq_r1"
+        pattern: "01.qc/short_read_trim/{sample}.R1.trimed.fq.gz"
+      - name: r2_trimmed
+        port: "trimmed_fastq_r2"
+        pattern: "01.qc/short_read_trim/{sample}.R2.trimed.fq.gz"
+      - name: html_report
+        port: "fastp_html_report"
+        pattern: "01.qc/short_read_trim/{sample}.trimed.html"
+        kind: report
+      - name: json_report
+        port: "fastp_json_report"
+        pattern: "01.qc/short_read_trim/{sample}.trimed.json"
+        kind: report
+    config_requires:
+      - key: "convert_md5"
+        type: "string"
+        default: "link_dir"
+        description: "00.raw_data 下标准化软链子目录名(模块 02 产出落点)"
+      - key: "parameter.trim.length_required"
+        type: "integer"
+        minimum: 1
+        default: 75
+        description: "fastp 过滤后最短 read 长度"
+      - key: "parameter.trim.quality_threshold"
+        type: "integer"
+        minimum: 0
+        maximum: 40
+        default: 25
+        description: "fastp 质量修剪 Phred 阈值"
+      - key: "parameter.trim.adapter_fasta"
+        type: "string"
+        default: "../data/Universal_Adapter.fa"
+        description: "自定义接头序列 FASTA(经 workflow.source_path 解析)"
+      - key: "parameter.threads.fastp"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 6
+        description: "fastp 线程数"
+    conda: "envs/fastp.yaml"
+    resources_tier: "high_resource"
+
+  - name: multiqc_trim
+    summary: "聚合全部样本 fastp 结果(trim FASTQ + HTML)为 trim 阶段 MultiQC 报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: md5_check
+        port: "md5_check"
+        pattern: "01.qc/md5_check.tsv"
+        role: gate
+      - name: r1_trimmed
+        port: "trimmed_fastq_r1"
+        pattern: "01.qc/short_read_trim/{sample}.R1.trimed.fq.gz"
+        expand_over: samples
+      - name: r2_trimmed
+        port: "trimmed_fastq_r2"
+        pattern: "01.qc/short_read_trim/{sample}.R2.trimed.fq.gz"
+        expand_over: samples
+      - name: fastp_report
+        port: "fastp_html_report"
+        pattern: "01.qc/short_read_trim/{sample}.trimed.html"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "multiqc_trim_report"
+        pattern: "01.qc/multiqc_short_read_trim/multiqc_short_read_trim_report.html"
+        kind: report
+    config_requires:
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: merge_qc_report
+    summary: "跨模块聚合 raw FastQC(模块 03)与 trim fastp 结果为预处理总 MultiQC 报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: md5_check
+        port: "md5_check"
+        pattern: "01.qc/md5_check.tsv"
+        role: gate
+      - name: fastqc_files_r1
+        port: "fastqc_zip_r1"
+        pattern: "01.qc/short_read_qc_r1/{sample}_R1_fastqc.zip"
+        expand_over: samples
+      - name: fastqc_files_r2
+        port: "fastqc_zip_r2"
+        pattern: "01.qc/short_read_qc_r2/{sample}_R2_fastqc.zip"
+        expand_over: samples
+      - name: r1_trimmed
+        port: "trimmed_fastq_r1"
+        pattern: "01.qc/short_read_trim/{sample}.R1.trimed.fq.gz"
+        expand_over: samples
+      - name: r2_trimmed
+        port: "trimmed_fastq_r2"
+        pattern: "01.qc/short_read_trim/{sample}.R2.trimed.fq.gz"
+        expand_over: samples
+      - name: fastp_report
+        port: "fastp_html_report"
+        pattern: "01.qc/short_read_trim/{sample}.trimed.html"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "multiqc_merge_qc_report"
+        pattern: "01.qc/multiqc_merge_qc/multiqc_merge_qc_report.html"
+        kind: report
+    config_requires:
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"

@@ -1,0 +1,418 @@
+module:
+  id: "08.call_variant"
+  title: "RNA-seq 变异检测(GATK 最佳实践:预处理 + HaplotypeCaller + 过滤 + bcftools QC)"
+  snakefile: "rules/08.call_variant.smk"
+  stage: "04.variant"
+  summary: >
+    按 GATK RNA-seq 变异检测最佳实践对 sort.bam 做 read group 添加、重复标记、
+    N-cigar 拆分,经 HaplotypeCaller 检出 SNP/indel,再以 RNA-seq 特异阈值
+    (FS/QD)过滤提取 PASS 变异,并用 bcftools stats + MultiQC 做 raw/pass 双层 QC。
+  requires_helpers: []
+
+rules:
+  - name: CreateRefIndex
+    summary: "为参考基因组生成 GATK 前置索引(sequence dictionary .dict 与 FASTA 索引 .fai)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: fasta
+        port: "genome_fasta"
+        pattern: "{genome_fa}" # config['STAR_index'][Genome_Version]['genome_fa'],外部参考资产
+    outputs:
+      - name: dict
+        port: "genome_dict"
+        pattern: "{genome_fa_stem}.dict" # 由 genome_fa 经 os.path.splitext 去扩展名派生
+        kind: intermediate
+      - name: fai
+        port: "genome_fai"
+        pattern: "{genome_fa}.fai" # genome_fa 原路径追加 .fai 后缀
+        kind: intermediate
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule 取 [Genome_Version].genome_fa"
+    conda: "envs/gatk.yaml"
+    resources_tier: "high_resource"
+
+  - name: AddOrReplaceReadGroups
+    summary: "为 sorted BAM 添加/替换 read group 元数据(GATK 预处理第一阶段)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "sorted_bam"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bai
+        port: "sorted_bam_bai"
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+    outputs:
+      - name: bam
+        port: "rg_bam"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.bam"
+        kind: intermediate
+      - name: bai
+        port: "rg_bai"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.bai"
+        kind: intermediate
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+    conda: "envs/gatk.yaml"
+    resources_tier: "high_resource"
+
+  - name: MarkDuplicates
+    summary: "标记 BAM 中的 PCR/光学重复并输出重复率指标(GATK 预处理第二阶段)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "rg_bam"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.bam"
+    outputs:
+      - name: bam
+        port: "dedup_bam"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.dedup.bam"
+        kind: intermediate
+      - name: metrics
+        port: "markdup_metrics"
+        pattern: "04.variant/gatk_MarkDuplicates/{sample}.rg.dedup.metrics.txt"
+        kind: report
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+    conda: "envs/gatk.yaml"
+    resources_tier: "high_resource"
+
+  - name: SplitNCigarReads
+    summary: "将跨越剪接位点的 reads 按 N-cigar 拆分为外显子片段并硬剪切内含子悬垂(RNA-seq 特异预处理)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "dedup_bam"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.dedup.bam"
+      - name: ref_dict
+        port: "genome_dict"
+        pattern: "{genome_fa_stem}.dict" # 由 genome_fa 去扩展名派生,对应 CreateRefIndex 产物
+      - name: ref_fai
+        port: "genome_fai"
+        pattern: "{genome_fa}.fai"
+    outputs:
+      - name: bam
+        port: "split_bam"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.dedup.split.bam"
+        kind: intermediate
+      - name: bai
+        port: "split_bam_bai"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.dedup.split.bai"
+        kind: intermediate
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule 取 [Genome_Version].genome_fa"
+    conda: "envs/gatk.yaml"
+    resources_tier: "high_resource"
+
+  - name: HaplotypeCaller
+    summary: "GATK HaplotypeCaller 局部重组装变异检测,输出未过滤的原始 SNP/indel VCF"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: "split_bam"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.dedup.split.bam"
+      - name: bai
+        port: "split_bam_bai"
+        pattern: "04.variant/gatk/{sample}/{sample}.rg.dedup.split.bai"
+      - name: ref_dict
+        port: "genome_dict"
+        pattern: "{genome_fa_stem}.dict"
+      - name: ref_fai
+        port: "genome_fai"
+        pattern: "{genome_fa}.fai"
+    outputs:
+      - name: vcf
+        port: "raw_vcf"
+        pattern: "04.variant/gatk/{sample}/{sample}.raw_variants.vcf"
+        kind: intermediate
+      - name: idx
+        port: "raw_vcf_idx"
+        pattern: "04.variant/gatk/{sample}/{sample}.raw_variants.vcf.idx"
+        kind: intermediate
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule 取 [Genome_Version].genome_fa"
+      - key: "ploidy_setting"
+        type: "object"
+        default: null
+        description: "各基因组版本的倍性设置,本 rule 取 [Genome_Version].ploidy"
+      - key: "parameter.threads.gatk"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 1
+        description: "GATK HaplotypeCaller 线程数(native-pair-hmm-threads)"
+    conda: "envs/gatk.yaml"
+    resources_tier: "high_resource"
+
+  - name: VariantFiltration
+    summary: "按 RNA-seq 特异阈值(FS/QD + 滑窗聚类)对原始变异做质量过滤"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: vcf
+        port: "raw_vcf"
+        pattern: "04.variant/gatk/{sample}/{sample}.raw_variants.vcf"
+      - name: idx
+        port: "raw_vcf_idx"
+        pattern: "04.variant/gatk/{sample}/{sample}.raw_variants.vcf.idx"
+      - name: ref_dict
+        port: "genome_dict"
+        pattern: "{genome_fa_stem}.dict"
+      - name: ref_fai
+        port: "genome_fai"
+        pattern: "{genome_fa}.fai"
+    outputs:
+      - name: vcf
+        port: "filtered_vcf"
+        pattern: "04.variant/gatk/{sample}/{sample}.filtered.vcf"
+        kind: intermediate
+      - name: idx
+        port: "filtered_vcf_idx"
+        pattern: "04.variant/gatk/{sample}/{sample}.filtered.vcf.idx"
+        kind: intermediate
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule 取 [Genome_Version].genome_fa"
+      - key: "parameter.gatk.filter.rna_seq.window_size"
+        type: "integer"
+        minimum: 1
+        default: 35
+        description: "变异聚类检测滑窗大小"
+      - key: "parameter.gatk.filter.rna_seq.cluster_size"
+        type: "integer"
+        minimum: 1
+        default: 3
+        description: "触发过滤的最小聚类变异数"
+      - key: "parameter.gatk.filter.rna_seq.fs_threshold"
+        type: "number"
+        minimum: 0
+        default: 30.0
+        description: "FisherStrand 链偏好过滤阈值(RNA-seq 推荐 30.0)"
+      - key: "parameter.gatk.filter.rna_seq.qd_threshold"
+        type: "number"
+        minimum: 0
+        default: 2.0
+        description: "QualByDepth 质量深度比过滤阈值"
+    conda: "envs/gatk.yaml"
+    resources_tier: "high_resource"
+
+  - name: SelectVariants
+    summary: "从过滤后 VCF 中提取 PASS 高置信变异(模块交付级 VCF)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: vcf
+        port: "filtered_vcf"
+        pattern: "04.variant/gatk/{sample}/{sample}.filtered.vcf"
+      - name: ref_dict
+        port: "genome_dict"
+        pattern: "{genome_fa_stem}.dict"
+      - name: ref_fai
+        port: "genome_fai"
+        pattern: "{genome_fa}.fai"
+    outputs:
+      - name: vcf
+        port: "pass_vcf"
+        pattern: "04.variant/gatk/{sample}/{sample}.final.pass.vcf"
+      - name: idx
+        port: "pass_vcf_idx"
+        pattern: "04.variant/gatk/{sample}/{sample}.final.pass.vcf.idx"
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule 取 [Genome_Version].genome_fa"
+    conda: "envs/gatk.yaml"
+    resources_tier: "high_resource"
+
+  - name: bcftools_stats_raw
+    summary: "用 bcftools stats 统计未过滤原始变异(SNP/indel 计数、Ts/Tv 等 QC 指标)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: vcf
+        port: "raw_vcf"
+        pattern: "04.variant/gatk/{sample}/{sample}.raw_variants.vcf"
+      - name: idx
+        port: "raw_vcf_idx"
+        pattern: "04.variant/gatk/{sample}/{sample}.raw_variants.vcf.idx"
+    outputs:
+      - name: stats
+        port: "bcftools_stats_raw"
+        pattern: "04.variant/gatk_bcftools_stats_raw/{sample}.raw_variants.stats"
+        kind: intermediate
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule params.fasta 取 [Genome_Version].genome_fa"
+    conda: "envs/bcftools.yaml"
+    resources_tier: "high_resource"
+
+  - name: bcftools_stats_pass
+    summary: "用 bcftools stats 统计 PASS 高置信变异,评估过滤效果"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: vcf
+        port: "pass_vcf"
+        pattern: "04.variant/gatk/{sample}/{sample}.final.pass.vcf"
+      - name: idx
+        port: "pass_vcf_idx"
+        pattern: "04.variant/gatk/{sample}/{sample}.final.pass.vcf.idx"
+    outputs:
+      - name: stats
+        port: "bcftools_stats_pass"
+        pattern: "04.variant/gatk_bcftools_stats_pass/{sample}.final.pass.stats"
+        kind: intermediate
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "Genome_Version"
+        type: "string"
+        default: null
+        description: "参考基因组版本(由 --analysisyaml 注入)"
+      - key: "STAR_index"
+        type: "object"
+        default: null
+        description: "各基因组版本的参考文件路径表,本 rule params.fasta 取 [Genome_Version].genome_fa"
+    conda: "envs/bcftools.yaml"
+    resources_tier: "high_resource"
+
+  - name: multiqc_bcftools_stats_raw
+    summary: "聚合全部样本原始变异 bcftools 统计为一份 MultiQC 报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: stats
+        port: "bcftools_stats_raw"
+        pattern: "04.variant/gatk_bcftools_stats_raw/{sample}.raw_variants.stats"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "multiqc_bcftools_raw_report"
+        pattern: "04.variant/multiqc_gatk_bcftools_stats_raw/multiqc_gatk_bcftools_stats_raw.html"
+        kind: report
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: multiqc_bcftools_stats_pass
+    summary: "聚合全部样本 PASS 变异 bcftools 统计为一份 MultiQC 报告(模块主要 QC 交付物)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: stats
+        port: "bcftools_stats_pass"
+        pattern: "04.variant/gatk_bcftools_stats_pass/{sample}.final.pass.stats"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "multiqc_bcftools_pass_report"
+        pattern: "04.variant/multiqc_gatk_bcftools_stats_pass/multiqc_gatk_bcftools_stats_pass.html"
+        kind: report
+    config_requires:
+      - key: "call_variant"
+        type: "boolean"
+        default: false
+        description: "是否启用 RNA-seq 变异检测模块"
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"

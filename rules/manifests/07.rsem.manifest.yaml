@@ -1,0 +1,155 @@
+module:
+  id: "07.rsem"
+  title: "RSEM 基因/isoform 表达定量与表达矩阵合并"
+  snakefile: "rules/07.rsem.smk"
+  stage: "03.count"
+  summary: >
+    基于 STAR 转录组 BAM 用 RSEM(EM 算法)估计基因/isoform 表达量(TPM/FPKM/counts),
+    MultiQC 聚合定量 QC,再合并全样本 TPM/counts/FPKM 表达矩阵,
+    最后以 rsem_ultimate 做表达矩阵综合验证收口。
+  requires_helpers: []
+
+rules:
+  - name: RSEM
+    summary: "RSEM 对单样本转录组 BAM 做基因/isoform 表达定量(genes/isoforms results + stat 文件)"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: chrlist
+        port: "rsem_index"
+        pattern: "{rsem_index}.ti"  # config['STAR_index'][Genome_Version]['rsem_index'] + '.ti',外部预建索引
+      - name: grp
+        port: "rsem_index"
+        pattern: "{rsem_index}.seq"  # 同上,rsem_index 前缀 + '.seq'
+      - name: idx_fa
+        port: "rsem_index"
+        pattern: "{rsem_index}.transcripts.fa"  # 同上,rsem_index 前缀 + '.transcripts.fa'
+      - name: Transcriptome_bam
+        port: "star_transcriptome_bam"
+        pattern: "02.mapping/STAR/{sample}/{sample}.Aligned.toTranscriptome.out.bam"
+    outputs:
+      - name: genes_result
+        port: "rsem_genes_results"
+        pattern: "03.count/rsem/{sample}.genes.results"
+      - name: isoforms_result
+        port: "rsem_isoforms_results"
+        pattern: "03.count/rsem/{sample}.isoforms.results"
+      - name: cnt
+        port: "rsem_cnt"
+        pattern: "03.count/rsem/{sample}.stat/{sample}.cnt"
+        kind: intermediate
+      - name: model
+        port: "rsem_model"
+        pattern: "03.count/rsem/{sample}.stat/{sample}.model"
+        kind: intermediate
+      - name: theta
+        port: "rsem_theta"
+        pattern: "03.count/rsem/{sample}.stat/{sample}.theta"
+        kind: intermediate
+    config_requires:
+      - key: "Genome_Version"
+        type: "string"
+        description: "参考基因组版本号,索引 STAR_index 下 rsem_index"
+      - key: "STAR_index"
+        type: "object"
+        description: "参考资产表,本 rule 用 rsem_index(input 三件 + params.rsem_index 前缀)"
+      - key: "parameter.threads.rsem-calculate"
+        type: "integer"
+        minimum: 1
+        maximum: 64
+        default: 10
+        description: "rsem-calculate-expression 线程数"
+    conda: "envs/rsem.yaml"
+    resources_tier: "high_resource"
+
+  - name: rsem_multiqc
+    summary: "聚合全部样本 RSEM .cnt 统计为定量 QC MultiQC 报告"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: fastqc_files_r1  # .smk 原槽名(历史遗留命名),实为全样本 RSEM .cnt 收集器
+        port: "rsem_cnt"
+        pattern: "03.count/rsem/{sample}.stat/{sample}.cnt"
+        expand_over: samples
+    outputs:
+      - name: report
+        port: "multiqc_rsem_report"
+        pattern: "03.count/multiqc_rsem_report.html"
+        kind: report
+    config_requires:
+      - key: "parameter.threads.multiqc"
+        type: "integer"
+        minimum: 1
+        maximum: 32
+        default: 1
+        description: "MultiQC 线程数"
+    conda: "envs/multiqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: merge_rsem
+    summary: "merge_rsem.py 合并全样本 RSEM 结果为 TPM/counts/FPKM 三张表达矩阵(DEG 下游主输入)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: genes_result
+        port: "rsem_genes_results"
+        pattern: "03.count/rsem/{sample}.genes.results"
+        expand_over: samples
+      - name: isoforms_result
+        port: "rsem_isoforms_results"
+        pattern: "03.count/rsem/{sample}.isoforms.results"
+        expand_over: samples
+    outputs:
+      - name: tpm
+        port: "rsem_tpm_matrix"
+        pattern: "03.count/merge_rsem_tpm.tsv"
+      - name: counts
+        port: "rsem_counts_matrix"
+        pattern: "03.count/merge_rsem_counts.tsv"
+      - name: fpkm
+        port: "rsem_fpkm_matrix"
+        pattern: "03.count/merge_rsem_fpkm.tsv"
+    config_requires:
+      - key: "sample_csv"
+        type: "string"
+        description: "样本信息表 CSV(--analysisyaml 注入,params.sample_csv 用于样本注释与列排序)"
+      - key: "parameter.merge_rsem.path"
+        type: "string"
+        default: "../src/src/gene_matrix/merge_rsem.py"
+        description: "merge_rsem.py 合并脚本路径(经 workflow.source_path 解析)"
+      - key: "parameter.merge_rsem.extension"
+        type: "string"
+        default: ".genes.results"
+        description: "RSEM 单样本结果文件扩展名,用于扫描输入目录"
+    conda: "envs/python3.yaml"
+    resources_tier: "low_resource"
+
+  - name: ultimate
+    summary: "qc_rsem_ultimate.py 对三张表达矩阵做综合验证,产出 directory 形式的 QC 结果目录"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: tpm
+        port: "rsem_tpm_matrix"
+        pattern: "03.count/merge_rsem_tpm.tsv"
+      - name: counts
+        port: "rsem_counts_matrix"
+        pattern: "03.count/merge_rsem_counts.tsv"
+      - name: fpkm
+        port: "rsem_fpkm_matrix"
+        pattern: "03.count/merge_rsem_fpkm.tsv"
+    outputs:
+      - name: ultimate
+        port: "rsem_ultimate_dir"
+        pattern: "03.count/rsem_ultimate/"  # directory() 输出
+    config_requires:
+      - key: "parameter.qc_rsem_ultimate.path"
+        type: "string"
+        default: "../src/src/gene_matrix/qc_rsem_ultimate.py"
+        description: "qc_rsem_ultimate.py 验证脚本路径(经 workflow.source_path 解析)"
+    conda: "envs/rsem_ultimate.yaml"
+    resources_tier: "low_resource"

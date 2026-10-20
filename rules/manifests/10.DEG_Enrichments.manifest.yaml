@@ -1,0 +1,209 @@
+module:
+  id: "10.DEG_Enrichments"
+  title: "差异表达分析(DESeq2)与 GO 富集分析"
+  snakefile: "rules/10.DEG_Enrichments.smk"
+  stage: "06.DEG"
+  summary: >
+    基于 RSEM 全样本表达矩阵完成表达分布 QC、TPM/FPKM 高变基因热图、
+    DESeq2 差异表达分析(全部 contrast)及下游 GO 富集分析。
+    注意:产物落在 06.DEG/ 与 07.Enrichments/,与模块号不对应。
+  requires_helpers: []
+
+rules:
+  - name: gene_dist
+    summary: "基于 TPM/FPKM 矩阵绘制全样本基因表达分布 QC 图(PDF+PNG)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: tpm
+        port: rsem_tpm_matrix
+        pattern: "03.count/merge_rsem_tpm.tsv"
+      - name: fpkm
+        port: rsem_fpkm_matrix
+        pattern: "03.count/merge_rsem_fpkm.tsv"
+    outputs:
+      - name: dist_pdf
+        port: gene_expression_dist_pdf
+        pattern: "06.DEG/Gene_Expression/Gene_Expression_Distribution.pdf"
+        kind: report
+      - name: dist_png
+        port: gene_expression_dist_png
+        pattern: "06.DEG/Gene_Expression/Gene_Expression_Distribution.png"
+        kind: report
+    config_requires:
+      - key: deg
+        type: boolean
+        default: true
+        description: "DEG 差异分析模块开关(false 时裁剪本模块全部目标)"
+      - key: parameter.Distribution.path
+        type: string
+        description: "表达分布绘图脚本路径(仓库相对)"
+      - key: parameter.Distribution.width
+        type: number
+        description: "分布图宽度(英寸)"
+      - key: parameter.Distribution.height
+        type: number
+        description: "分布图高度(英寸)"
+      - key: sample_csv
+        type: string
+        description: "样本信息表 CSV 路径(列 sample/sample_name/group)"
+    conda: "envs/deg_deseq2.yaml"
+    resources_tier: "low_resource"
+
+  - name: gene_heatmap_tpm
+    summary: "基于 TPM 矩阵绘制高变基因聚类热图(PDF+PNG)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: tpm
+        port: rsem_tpm_matrix
+        pattern: "03.count/merge_rsem_tpm.tsv"
+      - name: fpkm  # 与 .smk 一致的命名槽;shell 实际只用 -i {input.tpm}
+        port: rsem_fpkm_matrix
+        pattern: "03.count/merge_rsem_fpkm.tsv"
+    outputs:
+      - name: dist_pdf
+        port: heatmap_tpm_pdf
+        pattern: "06.DEG/Heatmap_tpm/Heatmap_TopVar.pdf"
+        kind: report
+      - name: dist_png
+        port: heatmap_tpm_png
+        pattern: "06.DEG/Heatmap_tpm/Heatmap_TopVar.png"
+        kind: report
+    config_requires:
+      - key: deg
+        type: boolean
+        default: true
+        description: "DEG 差异分析模块开关(false 时裁剪本模块全部目标)"
+      - key: parameter.Heatmap.path
+        type: string
+        description: "热图绘图脚本路径(仓库相对)"
+      - key: sample_csv
+        type: string
+        description: "样本信息表 CSV 路径(列 sample/sample_name/group)"
+    conda: "envs/deg_deseq2.yaml"
+    resources_tier: "low_resource"
+
+  - name: gene_heatmap_fpkm
+    summary: "基于 FPKM 矩阵绘制高变基因聚类热图(PDF+PNG)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: tpm  # 与 .smk 一致的命名槽;shell 实际只用 -i {input.fpkm}
+        port: rsem_tpm_matrix
+        pattern: "03.count/merge_rsem_tpm.tsv"
+      - name: fpkm
+        port: rsem_fpkm_matrix
+        pattern: "03.count/merge_rsem_fpkm.tsv"
+    outputs:
+      - name: dist_pdf
+        port: heatmap_fpkm_pdf
+        pattern: "06.DEG/Heatmap_fpkm/Heatmap_TopVar.pdf"
+        kind: report
+      - name: dist_png
+        port: heatmap_fpkm_png
+        pattern: "06.DEG/Heatmap_fpkm/Heatmap_TopVar.png"
+        kind: report
+    config_requires:
+      - key: deg
+        type: boolean
+        default: true
+        description: "DEG 差异分析模块开关(false 时裁剪本模块全部目标)"
+      - key: parameter.Heatmap.path
+        type: string
+        description: "热图绘图脚本路径(仓库相对)"
+      - key: sample_csv
+        type: string
+        description: "样本信息表 CSV 路径(列 sample/sample_name/group)"
+    conda: "envs/deg_deseq2.yaml"
+    resources_tier: "low_resource"
+
+  - name: DEG
+    summary: "对全部 contrast 一次性运行 DESeq2 差异表达分析,输出统计总表与结果目录"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: counts
+        port: rsem_counts_matrix
+        pattern: "03.count/merge_rsem_counts.tsv"
+    outputs:
+      - name: output  # 槽名在 .smk 中就叫 output
+        port: deg_statistics_csv
+        pattern: "06.DEG/DESEQ2/All_Contrast_DEG_Statistics.csv"
+      - name: deg_dir
+        port: deg_dir
+        pattern: "06.DEG/DESEQ2"  # directory() 输出
+        kind: intermediate
+    config_requires:
+      - key: deg
+        type: boolean
+        default: true
+        description: "DEG 差异分析模块开关(false 时裁剪本模块全部目标)"
+      - key: sample_csv
+        type: string
+        description: "样本信息表 CSV 路径(列 sample/sample_name/group)"
+      - key: paired_csv
+        type: string
+        default: ""
+        description: "contrast 配对表 CSV 路径(必须含 Control/Treat 两列;缺省为空字符串)"
+      - key: parameter.DEG.PATH
+        type: string
+        description: "DESeq2 分析 R 脚本路径(仓库相对)"
+      - key: parameter.DEG.LFC
+        type: number
+        description: "差异基因 log2 fold change 显著性阈值"
+      - key: parameter.DEG.PVAL
+        type: number
+        description: "差异基因校正后 p-value 显著性阈值"
+    conda: "envs/deg_deseq2.yaml"
+    resources_tier: "low_resource"
+
+  - name: Enrichments
+    summary: "对 DESeq2 差异基因做 GO 富集分析,输出富集结果目录(全部 contrast)"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: DEG_info
+        port: deg_statistics_csv
+        pattern: "06.DEG/DESEQ2/All_Contrast_DEG_Statistics.csv"
+    outputs:
+      - name: Enrichments_dir
+        port: enrichments_dir
+        pattern: "07.Enrichments"  # directory() 输出,唯一 output 槽
+    config_requires:
+      - key: deg
+        type: boolean
+        default: true
+        description: "DEG 差异分析模块开关(false 时裁剪本模块全部目标)"
+      - key: Genome_Version
+        type: string
+        description: "参考基因组版本名(索引 STAR_index/deg_enrich_wrapper 子键)"
+      - key: STAR_index.GO.obo
+        type: string
+        description: "GO 本体文件 go-basic.obo 路径(外部参考资产)"
+      - key: STAR_index
+        type: object
+        description: "参考资源索引;本 rule 使用 STAR_index[Genome_Version].go_annotation(基因-GO 注释表)"
+      - key: deg_enrich_wrapper
+        type: object
+        description: "富集 wrapper 配置;本 rule 使用 deg_enrich_wrapper[Genome_Version].gene_col(DEG 表中基因 ID 列名)"
+      - key: parameter.Enrichments.PATH
+        type: string
+        description: "GO 富集 R 脚本路径(仓库相对)"
+      - key: parameter.Enrichments.PATH_py
+        type: string
+        description: "GO 富集 Python wrapper 脚本路径(仓库相对)"
+      - key: parameter.Enrichments.gene_regex
+        type: string
+        description: "从基因 ID 提取基因名的正则表达式"
+      - key: parameter.Enrichments.cutoff
+        type: number
+        default: 0.05
+        description: "富集结果显著性阈值"
+    conda: "envs/go_enrich_r.yaml"
+    resources_tier: "low_resource"

@@ -1,0 +1,347 @@
+module:
+  id: "11.rMATS"
+  title: "可变剪接分析(rMATS)与 circRNA 鉴定(CIRCexplorer2)"
+  snakefile: "rules/11.rMATS.smk"
+  stage: "07.AS"
+  summary: >
+    含 RSeQC 链特异性推断与剪接位点注释、CIRCexplorer2 circRNA 鉴定、
+    rMATS 组间差异剪接(rmats_pair)与单样本剪接事件检测(rmats_single)及跨组/跨样本汇总。
+    注意:产物落在 07.AS/ 与 02.mapping/,与模块号不对应;
+    注释掉的 gtf2bed12 rule 未收录(bed12 为预建外部参考)。
+  requires_helpers: []
+
+rules:
+  - name: CIRCexplorer2_run
+    summary: "基于 STAR 嵌合接头文件用 CIRCexplorer2 鉴定并注释单样本 circRNA"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: Chimeric
+        port: star_chimeric_junction
+        pattern: "02.mapping/STAR/{sample}/{sample}.Chimeric.out.junction"
+    outputs:
+      - name: Chimeric_clean
+        port: chimeric_clean_junction
+        pattern: "02.mapping/STAR/{sample}/{sample}.Chimeric.clean.junction"
+        kind: intermediate  # temp() 中间产物
+      - name: back_spliced_junction
+        port: circrna_back_spliced_bed
+        pattern: "02.mapping/CIRCexplorer2/{sample}/back_spliced_junction.bed"
+      - name: circularRNA
+        port: circrna_known_txt
+        pattern: "02.mapping/CIRCexplorer2/{sample}/circularRNA_known.txt"
+    config_requires:
+      - key: rmats
+        type: boolean
+        default: true
+        description: "rMATS 可变剪接模块开关(false 时裁剪本模块全部目标,含 circRNA 鉴定)"
+      - key: Genome_Version
+        type: string
+        description: "参考基因组版本名(索引 STAR_index 子键)"
+      - key: STAR_index
+        type: object
+        description: "参考资源索引;本 rule 经 params 使用 STAR_index[Genome_Version].ref_all(基因信息总表)与 .genome_fa(参考基因组 FASTA)"
+    conda: "envs/circexplorer2.yaml"
+    resources_tier: "low_resource"
+
+  - name: infer_experiment
+    summary: "用 RSeQC infer_experiment 推断单样本 RNA-seq 文库链特异性"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bed12
+        port: reference_bed12
+        pattern: "{reference_bed12}"  # 外部参考:config['STAR_index'][Genome_Version]['bed12'],预建资产不在库内生成
+      - name: bam
+        port: sorted_bam
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+    outputs:
+      - name: library
+        port: strandness_summary
+        pattern: "07.AS/qc/strandness/{sample}.summary.txt"
+        kind: intermediate
+    config_requires:
+      - key: rmats
+        type: boolean
+        default: true
+        description: "rMATS 可变剪接模块开关(false 时裁剪本模块全部目标)"
+      - key: Genome_Version
+        type: string
+        description: "参考基因组版本名(索引 STAR_index 子键)"
+      - key: STAR_index
+        type: object
+        description: "参考资源索引;本 rule 使用 STAR_index[Genome_Version].bed12(参考基因 BED12)"
+    conda: "envs/rseqc.yaml"
+    resources_tier: "low_resource"
+
+  - name: merge_strandness_results
+    summary: "汇总全部样本链特异性推断结果为单一文件,供 rMATS 文库类型判定"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: strandness_files  # 匿名 expand 槽:expand("07.AS/qc/strandness/{sample}.summary.txt", sample=samples.keys())
+        port: strandness_summary
+        pattern: "07.AS/qc/strandness/{sample}.summary.txt"
+        expand_over: samples
+    outputs:
+      - name: all_strandness  # 匿名槽:"07.AS/qc/all_samples_strandness.txt"
+        port: all_samples_strandness
+        pattern: "07.AS/qc/all_samples_strandness.txt"
+        kind: intermediate
+    config_requires:
+      - key: rmats
+        type: boolean
+        default: true
+        description: "rMATS 可变剪接模块开关(false 时裁剪本模块全部目标)"
+    resources_tier: "low_resource"  # 无 conda(shell 仅 grep -H "")
+
+  - name: junction_annotation
+    summary: "用 RSeQC junction_annotation 对单样本剪接位点做已知/新颖注释"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: sorted_bam
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: bai  # 仅作依赖,shell 未直接使用
+        port: sorted_bam_bai
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam.bai"
+      - name: bed
+        port: reference_bed12
+        pattern: "{reference_bed12}"  # 外部参考:config['STAR_index'][Genome_Version]['bed12'],预建资产不在库内生成
+    outputs:
+      - name: splice_events
+        port: junction_splice_events_pdf
+        pattern: "02.mapping/junction_annotation/{sample}.splice_events.pdf"
+        kind: report
+      - name: splice_junction
+        port: junction_splice_junction_pdf
+        pattern: "02.mapping/junction_annotation/{sample}.splice_junction.pdf"
+        kind: report
+      - name: junction
+        port: junction_bed
+        pattern: "02.mapping/junction_annotation/{sample}.junction.bed"
+      - name: junction_Interact
+        port: junction_interact_bed
+        pattern: "02.mapping/junction_annotation/{sample}.junction.Interact.bed"
+      - name: junction_plot
+        port: junction_plot_r
+        pattern: "02.mapping/junction_annotation/{sample}.junction_plot.r"
+        kind: intermediate
+      - name: junction_xls
+        port: junction_xls
+        pattern: "02.mapping/junction_annotation/{sample}.junction.xls"
+      - name: log  # 槽名就是 log:由 shell 重定向写入的注释日志文件,不是 snakemake log 指令
+        port: junction_annotation_txt
+        pattern: "02.mapping/junction_annotation/{sample}.junction_annotation.txt"
+        kind: intermediate
+    config_requires:
+      - key: rmats
+        type: boolean
+        default: true
+        description: "rMATS 可变剪接模块开关(false 时裁剪本模块全部目标)"
+      - key: Genome_Version
+        type: string
+        description: "参考基因组版本名(索引 STAR_index 子键)"
+      - key: STAR_index
+        type: object
+        description: "参考资源索引;本 rule 使用 STAR_index[Genome_Version].bed12(参考基因 BED12)"
+    conda: "envs/rseqc.yaml"
+    resources_tier: "high_resource"  # 审计为 medium_resource,按映射归入 high_resource
+
+  - name: rmats_run
+    summary: "对单个 contrast 运行 rMATS 组间差异可变剪接分析(自动判定文库类型)"
+    wildcards: ["contrast"]
+    dynamic: true  # input 经 unpack(get_contrast_bams) 从 CONTRAST_MAP 动态展开 b1/b2 两组 BAM 列表
+    per_sample: false
+    inputs:
+      - name: b1  # unpack(get_contrast_bams) 展开:对照组(Control)各样本 sort.bam 列表
+        port: sorted_bam
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: b2  # unpack(get_contrast_bams) 展开:处理组(Treat)各样本 sort.bam 列表
+        port: sorted_bam
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: gtf
+        port: reference_gtf
+        pattern: "{reference_gtf}"  # 外部参考:config['STAR_index'][Genome_Version]['genome_gtf']
+      - name: lib_qc
+        port: all_samples_strandness
+        pattern: "07.AS/qc/all_samples_strandness.txt"
+    outputs:
+      - name: summary
+        port: rmats_pair_summary
+        pattern: "07.AS/rmats_pair/{contrast}/summary.txt"
+      - name: SE_MATS_JC
+        port: rmats_pair_se_mats
+        pattern: "07.AS/rmats_pair/{contrast}/SE.MATS.JC.txt"  # MXE/A5SS/A3SS/RI 同目录产生但未声明为 output
+      - name: lib_check_log
+        port: rmats_pair_lib_check_log
+        pattern: "07.AS/rmats_pair/{contrast}/libType_check.log"
+        kind: intermediate
+    config_requires:
+      - key: rmats
+        type: boolean
+        default: true
+        description: "rMATS 可变剪接模块开关(false 时裁剪本模块全部目标)"
+      - key: only_qc
+        type: boolean
+        default: false
+        description: "全局仅 QC 开关(true 时不加载 contrast,本 rule 无目标)"
+      - key: paired_csv
+        type: string
+        description: "contrast 配对表 CSV 路径(必须含 Control/Treat 两列,驱动 CONTRAST_MAP)"
+      - key: Genome_Version
+        type: string
+        description: "参考基因组版本名(索引 STAR_index 子键)"
+      - key: STAR_index
+        type: object
+        description: "参考资源索引;本 rule 使用 STAR_index[Genome_Version].genome_gtf(参考基因注释 GTF)"
+      - key: Library_Types
+        type: string
+        description: "预期文库类型(供 check_libtype 脚本与实际链特异性比对)"
+      - key: parameter.rmats.readLength
+        type: integer
+        minimum: 1
+        description: "rMATS --readLength 读长参数"
+      - key: parameter.threads.rmats
+        type: integer
+        minimum: 1
+        description: "rMATS 线程数"
+      - key: software.check_libtype
+        type: string
+        description: "文库类型自动判定脚本路径(仓库相对)"
+    conda: "envs/rmats.yaml"
+    resources_tier: "high_resource"
+
+  - name: merge_rmats_summary
+    summary: "跨 contrast 汇总组间 rMATS 结果,生成明细与总览两张表"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: summary
+        port: rmats_pair_summary
+        pattern: "07.AS/rmats_pair/{contrast}/summary.txt"
+        expand_over: contrasts  # expand(..., contrast=ALL_CONTRASTS)
+      - name: SE_MATS_JC
+        port: rmats_pair_se_mats
+        pattern: "07.AS/rmats_pair/{contrast}/SE.MATS.JC.txt"
+        expand_over: contrasts
+    outputs:
+      - name: detail
+        port: rmats_pair_detail
+        pattern: "07.AS/rmats_pair/rmats_detail.txt"
+      - name: sumarry  # 槽名拼写为 sumarry,与 .smk 原文一致
+        port: rmats_pair_summary_all
+        pattern: "07.AS/rmats_pair/rmats_summary.txt"
+    config_requires:
+      - key: rmats
+        type: boolean
+        default: true
+        description: "rMATS 可变剪接模块开关(false 时裁剪本模块全部目标)"
+      - key: parameter.rmats_summary.path
+        type: string
+        description: "rMATS 结果汇总脚本路径(仓库相对)"
+      - key: parameter.threads.rmats
+        type: integer
+        minimum: 1
+        description: "rMATS 线程数"
+    conda: "envs/python3.yaml"
+    resources_tier: "high_resource"
+
+  - name: rmats_single_run
+    summary: "对单样本运行 rMATS 单样本模式(--statoff)检测全部五类剪接事件"
+    wildcards: ["sample"]
+    dynamic: false
+    per_sample: true
+    inputs:
+      - name: bam
+        port: sorted_bam
+        pattern: "02.mapping/STAR/sort_index/{sample}.sort.bam"
+      - name: gtf
+        port: reference_gtf
+        pattern: "{reference_gtf}"  # 外部参考:config['STAR_index'][Genome_Version]['genome_gtf']
+      - name: lib_qc
+        port: all_samples_strandness
+        pattern: "07.AS/qc/all_samples_strandness.txt"
+    outputs:
+      - name: se
+        port: rmats_single_se
+        pattern: "07.AS/rmats_single/{sample}/SE.MATS.JC.txt"
+      - name: mx
+        port: rmats_single_mxe
+        pattern: "07.AS/rmats_single/{sample}/MXE.MATS.JC.txt"
+      - name: summary
+        port: rmats_single_summary
+        pattern: "07.AS/rmats_single/{sample}/summary.txt"
+      - name: lib_check_log
+        port: rmats_single_lib_check_log
+        pattern: "07.AS/rmats_single/{sample}/libType_check.log"
+        kind: intermediate
+    config_requires:
+      - key: rmats
+        type: boolean
+        default: true
+        description: "rMATS 可变剪接模块开关(false 时裁剪本模块全部目标)"
+      - key: Genome_Version
+        type: string
+        description: "参考基因组版本名(索引 STAR_index 子键)"
+      - key: STAR_index
+        type: object
+        description: "参考资源索引;本 rule 使用 STAR_index[Genome_Version].genome_gtf(参考基因注释 GTF)"
+      - key: Library_Types
+        type: string
+        description: "预期文库类型(供 check_libtype 脚本与实际链特异性比对)"
+      - key: parameter.rmats.readLength
+        type: integer
+        minimum: 1
+        description: "rMATS --readLength 读长参数"
+      - key: parameter.threads.rmats
+        type: integer
+        minimum: 1
+        description: "rMATS 线程数"
+      - key: software.check_libtype
+        type: string
+        description: "文库类型自动判定脚本路径(仓库相对)"
+    conda: "envs/rmats.yaml"
+    resources_tier: "high_resource"
+
+  - name: merge_rmats_single_summary
+    summary: "跨样本汇总单样本 rMATS 结果,生成明细与总览两张表"
+    wildcards: []
+    dynamic: false
+    per_sample: false
+    inputs:
+      - name: summary
+        port: rmats_single_summary
+        pattern: "07.AS/rmats_single/{sample}/summary.txt"
+        expand_over: samples
+      - name: se
+        port: rmats_single_se
+        pattern: "07.AS/rmats_single/{sample}/SE.MATS.JC.txt"
+        expand_over: samples
+    outputs:
+      - name: detail
+        port: rmats_single_detail
+        pattern: "07.AS/rmats_single/rmats_detail.txt"
+      - name: sumarry  # 槽名拼写为 sumarry,与 .smk 原文一致
+        port: rmats_single_summary_all
+        pattern: "07.AS/rmats_single/rmats_summary.txt"
+    config_requires:
+      - key: rmats
+        type: boolean
+        default: true
+        description: "rMATS 可变剪接模块开关(false 时裁剪本模块全部目标)"
+      - key: parameter.rmats_summary.path
+        type: string
+        description: "rMATS 结果汇总脚本路径(仓库相对)"
+      - key: parameter.threads.rmats
+        type: integer
+        minimum: 1
+        description: "rMATS 线程数"
+    conda: "envs/python3.yaml"
+    resources_tier: "high_resource"
