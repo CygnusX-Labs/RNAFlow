@@ -1123,3 +1123,7 @@ Further enhance AI's capabilities in bioinformatics analysis:
 
 ---
 **Author**: JZHANG | **Version**: RNAFlow_v0.1.9
+
+## 🔗 Links
+- GitHub: [repository](https://github.com/xsx123123/RNAFlow)
+- LINUX DO: [Announcement](https://linux.do/) (Original)

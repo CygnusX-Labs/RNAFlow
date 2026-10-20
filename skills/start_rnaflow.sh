@@ -10,27 +10,27 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PATH_CONFIG="${SCRIPT_DIR}/path_config.yaml"
 
-# Default values - auto-detect RNAFlow root
-# RNAFlow root is one directory up from skills/
-DEFAULT_RNAFLOW_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-RNAFLOW_ROOT="$DEFAULT_RNAFLOW_ROOT"
-DEFAULT_CONDA_ENV="rnaflow"
+# Auto-detect RNAFLOW_ROOT based on script location
+SCRIPT_PARENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+RNAFLOW_ROOT="$SCRIPT_PARENT_DIR"
+DEFAULT_CONDA_ENV="snakemake"
 AUTO_ACTIVATE=false
 
 # Load config from YAML if available
 if [ -f "$PATH_CONFIG" ]; then
     echo "Loading configuration from $PATH_CONFIG"
     # Parse YAML (simple parsing, no external dependencies)
-    CONFIG_RNAFLOW_ROOT=$(grep '^RNAFLOW_ROOT:' "$PATH_CONFIG" | cut -d' ' -f2 | tr -d '"' || true)
-    if [ -n "$CONFIG_RNAFLOW_ROOT" ]; then
-        # If path is relative, make it absolute relative to skills dir
-        if [[ "$CONFIG_RNAFLOW_ROOT" != /* ]]; then
-            RNAFLOW_ROOT=$(cd "$SCRIPT_DIR/$CONFIG_RNAFLOW_ROOT" && pwd)
+    CONFIG_ROOT=$(grep '^RNAFLOW_ROOT:' "$PATH_CONFIG" | cut -d' ' -f2 | tr -d '"' || true)
+    # Only override auto-detected root if config explicitly sets a non-empty value
+    if [ -n "$CONFIG_ROOT" ]; then
+        # Resolve relative paths against the skills directory
+        if [[ "$CONFIG_ROOT" != /* ]]; then
+            RNAFLOW_ROOT=$(cd "$SCRIPT_DIR/$CONFIG_ROOT" && pwd)
         else
-            RNAFLOW_ROOT="$CONFIG_RNAFLOW_ROOT"
+            RNAFLOW_ROOT="$CONFIG_ROOT"
         fi
     fi
-    DEFAULT_CONDA_ENV=$(grep '^  DEFAULT_ENV_NAME:' "$PATH_CONFIG" | cut -d' ' -f4 | tr -d '"' || echo "rnaflow")
+    DEFAULT_CONDA_ENV=$(grep '^  DEFAULT_ENV_NAME:' "$PATH_CONFIG" | cut -d' ' -f4 | tr -d '"' || echo "snakemake")
     AUTO_ACTIVATE=$(grep '^  AUTO_ACTIVATE:' "$PATH_CONFIG" | cut -d' ' -f4 || echo "false")
 fi
 
