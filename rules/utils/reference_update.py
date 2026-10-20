@@ -17,6 +17,8 @@ PATH_KEYS = {
     "obo",
     "ref_all",
     "id_map",
+    "term2gene",
+    "term2name",
 }
 
 

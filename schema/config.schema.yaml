@@ -43,6 +43,30 @@ definitions:
         type: "number"
         description: "Ploidy value"
     required: ["index", "genome_fa", "genome_gtf", "genome_gff", "rsem_index", "rsem_index_dir", "bed12"]
+  keggConfig:
+    type: "object"
+    description: "Offline KEGG enrichment configuration for one genome"
+    properties:
+      enabled:
+        type: "boolean"
+        description: "Whether to run KEGG enrichment"
+        default: false
+      organism:
+        type: "string"
+        description: "KEGG organism code used by the KEGG.db path (e.g. hsa, mmu, ath)"
+      gene_col:
+        type: "string"
+        description: "Column name for DEG gene identifiers; overrides the genome-level gene_col"
+      id_map:
+        type: "string"
+        description: "Two-column map: DEG gene ID <TAB> KEGG gene ID (relative to reference_path)"
+      term2gene:
+        type: "string"
+        description: "Offline two-column pathway-to-gene map; bypasses KEGG.db (relative to reference_path)"
+      term2name:
+        type: "string"
+        description: "Offline two-column pathway ID-to-name map (relative to reference_path)"
+    additionalProperties: true
 
 properties:
   project_name:
@@ -126,7 +150,11 @@ properties:
     default: true
   report:
     type: "boolean"
-    description: "Whether to generate HTML report for RNA-seq"
+    description: "Whether to run the deprecated built-in HTML renderer"
+    default: false
+  project_summary:
+    type: "boolean"
+    description: "Whether to export the versioned project JSON independently of HTML rendering"
     default: true
   report_engine:
     type: "string"
@@ -162,6 +190,18 @@ properties:
   fastq_screen_db_path:
     type: "string"
     description: "Root path for fastq_screen database"
+  deg_enrich_wrapper:
+    type: "object"
+    description: "Per-genome enrichment settings: gene ID column and optional KEGG configuration"
+    additionalProperties:
+      type: "object"
+      properties:
+        gene_col:
+          type: "string"
+          description: "Column name for gene identifiers in the DEG table"
+        kegg:
+          $ref: "#/definitions/keggConfig"
+      additionalProperties: true
   parameter:
     type: "object"
     description: "Software parameters configuration"

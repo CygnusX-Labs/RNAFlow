@@ -39,7 +39,8 @@ detect_novel_transcripts: false
 rmats: true
 gene_fusion: false
 deliver: true
-report: true
+project_summary: true  # Export versioned JSON for the external reporting repository
+report: false         # Deprecated built-in HTML report; not required for JSON export
 report_engine: auto
 
 # Output and File Naming Configuration

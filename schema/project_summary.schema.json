@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RNAFlow BioReport delivery v2",
+  "type": "object",
+  "required": ["schema_version", "path_base", "project", "input_files", "software_versions", "enrichment"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "path_base": {"const": "."},
+    "project": {
+      "type": "object",
+      "required": ["project_id", "analysis_date"],
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {"type": "string", "minLength": 1},
+        "client": {"type": ["string", "null"]},
+        "species": {"type": ["string", "null"]},
+        "genome_version": {"type": ["string", "null"]},
+        "pipeline_version": {"type": ["string", "null"]},
+        "analysis_date": {"type": "string", "format": "date"},
+        "report_date": {"type": "string", "format": "date"}
+      }
+    },
+    "input_files": {"type": "object", "additionalProperties": {"$ref": "#/$defs/path"}},
+    "software_versions": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["Software", "Version"], "additionalProperties": false,
+        "properties": {
+          "Software": {"type": "string", "minLength": 1},
+          "Version": {"type": "string", "minLength": 1},
+          "Link": {"type": "string", "pattern": "^https?://"}
+        }
+      }
+    },
+    "enrichment": {
+      "type": "object", "required": ["go", "kegg"], "additionalProperties": false,
+      "properties": {"go": {"$ref": "#/$defs/analysis"}, "kegg": {"$ref": "#/$defs/analysis"}}
+    },
+    "stats": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"total_samples": {"type": "integer", "minimum": 0}, "group_count": {"type": "integer", "minimum": 0}}
+    },
+    "analysis": {"type": "object"},
+    "report": {"type": "object"},
+    "ai": {"type": "object"}
+  },
+  "$defs": {
+    "path": {"type": "string", "pattern": "^data(?:/|$)", "minLength": 4},
+    "direction": {
+      "type": "object", "required": ["status"], "additionalProperties": false,
+      "properties": {
+        "status": {"enum": ["available", "no_results", "unavailable", "disabled", "failed"]},
+        "table": {"anyOf": [{"$ref": "#/$defs/path"}, {"type": "null"}]},
+        "full_table": {"anyOf": [{"$ref": "#/$defs/path"}, {"type": "null"}]},
+        "term_count": {"type": "integer", "minimum": 0},
+        "messages": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "analysis": {
+      "type": "object", "required": ["enabled", "method", "parameters", "contrasts"], "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "method": {"type": "string"},
+        "parameters": {
+          "type": "object", "additionalProperties": true,
+          "properties": {
+            "cutoff": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+          }
+        },
+        "contrasts": {"type": "object", "additionalProperties": {"type": "object", "required": ["UP", "DOWN"], "additionalProperties": false, "properties": {"UP": {"$ref": "#/$defs/direction"}, "DOWN": {"$ref": "#/$defs/direction"}}}}
+      },
+      "allOf": [{
+        "if": {"properties": {"enabled": {"const": true}}},
+        "then": {"required": ["method", "parameters", "contrasts"], "properties": {"parameters": {"required": ["cutoff"]}}}
+      }]
+    }
+  }
+}

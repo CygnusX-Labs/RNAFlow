@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Batch runner for the standalone offline KEGG enrichment script."""
+"""Batch runner for RNAFlow's shared KEGG enrichment script."""
 
 import argparse
 import csv
@@ -11,7 +11,7 @@ import sys
 def parse_args():
     here = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(
-        description="Run offline KEGG ORA for every contrast in a DEG statistics table."
+        description="Run KEGG ORA for every contrast in a DEG statistics table."
     )
     parser.add_argument("--deg_info", required=True,
                         help="All_Contrast_DEG_Statistics.csv; first column holds contrast names")
@@ -24,11 +24,12 @@ def parse_args():
     parser.add_argument("--id_map",
                         help="Headerless two-column TSV: source gene ID <TAB> KEGG gene ID")
     parser.add_argument("--kegg_rscript",
-                        default=os.path.join(here, "kegg_enricher.r"),
-                        help="Path to kegg_enricher.r (default: next to this script)")
+                        default=os.path.abspath(os.path.join(
+                            here, "..", "..", "src", "src", "Enrichments", "kegg_enricher.r")),
+                        help="Path to kegg_enricher.r (default: RNAFlow src/src/Enrichments)")
     parser.add_argument("--pattern", default="{contrast}_DEG.csv",
                         help="Per-contrast file name pattern (default: {contrast}_DEG.csv)")
-    parser.add_argument("--cutoff", default="0.05", help="p-value and q-value cutoff")
+    parser.add_argument("--cutoff", default="0.05", help="KEGG adjusted p-value cutoff")
     parser.add_argument("--padj_th", default="0.05", help="DEG adjusted p-value threshold")
     parser.add_argument("--lfc_th", default="1", help="DEG absolute log2 fold-change threshold")
     return parser.parse_args()

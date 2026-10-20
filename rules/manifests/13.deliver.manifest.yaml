@@ -80,10 +80,10 @@ rules:
         port: "report_delivery_details_log"
         pattern: "{data_deliver}/report_data/delivery_details.log"
     config_requires:
-      - key: "report"
+      - key: "project_summary"
         type: "boolean"
         default: true
-        description: "报告模块开关(false 时报告相关交付目标不进 rule all)"
+        description: "JSON 导出开关;启用后交付外部报告所需数据,无需启动旧 HTML 渲染"
       - key: "data_deliver"
         type: "string"
         description: "交付输出根目录(由 CLI --analysisyaml 注入,无默认值)"

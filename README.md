@@ -6,6 +6,8 @@
 
 [中文版本 (Chinese Version)](docs/README_zh.md)
 
+> **Result export v2:** `project_summary: true` exports separate GO/KEGG results for external reporting. The deprecated built-in HTML renderer defaults to `report: false`; historical `report: true` examples below opt into the old renderer, which is not adapted to v2. See [the JSON contract](docs/project_summary_json.md).
+
 RNAFlow is a fully automated RNA-seq analysis pipeline based on Snakemake. It implements an end-to-end closed-loop analysis from **Raw Data** to **Standardized Bioinformatics Reports (Interactive Report)**, and finally to **AI-powered results interpretation**.
 
 > **License**: RNAFlow is open-source software released under the MIT License. See [LICENSE](./LICENSE) for details.
@@ -861,7 +863,8 @@ snakemake \
 | `rmats` | bool | true | Alternative splicing analysis (rMATS) |
 | `fastq_screen` | bool | true | Contamination check (FastQ Screen) |
 | `deliver` | bool | true | Organize outputs and generate delivery manifests |
-| `report` | bool | true | Generate interactive HTML report |
+| `project_summary` | bool | true | Export project JSON with separate GO/KEGG results |
+| `report` | bool | false | Deprecated built-in HTML report |
 | `report_engine` | string | auto | Select Docker, Apptainer, or Singularity for report rendering |
 
 ---

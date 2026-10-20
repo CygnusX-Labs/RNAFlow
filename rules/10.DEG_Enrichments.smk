@@ -21,6 +21,23 @@ enrichment analysis, helping researchers understand the underlying biological pr
 molecular functions, and cellular components affected by their experimental conditions.
 """
 
+
+def _kegg_inputs():
+    """Return configured KEGG reference files for the selected genome."""
+    kegg = config.get('deg_enrich_wrapper', {}).get(
+        config['Genome_Version'], {}
+    ).get('kegg', {})
+    if not kegg.get('enabled', False):
+        return []
+    return [
+        path for path in (
+            kegg.get('id_map'),
+            kegg.get('term2gene'),
+            kegg.get('term2name'),
+        ) if path
+    ]
+
+
 rule gene_dist:
     """
     Generate quality control plots for gene expression distribution analysis.
@@ -183,6 +200,8 @@ rule DEG:
     """
     input:
         counts = "03.count/merge_rsem_counts.tsv",
+        samples = config['sample_csv'],
+        contrasts = config['paired_csv'],
     output:
         output = '06.DEG/DESEQ2/All_Contrast_DEG_Statistics.csv',
         deg_dir = directory("06.DEG/DESEQ2"),
@@ -242,11 +261,7 @@ rule Enrichments:
     """
     input:
         DEG_info = "06.DEG/DESEQ2/All_Contrast_DEG_Statistics.csv",
-        kegg_id_map = lambda wildcards: (
-            [config['deg_enrich_wrapper'][config['Genome_Version']]['kegg']['id_map']]
-            if config['deg_enrich_wrapper'][config['Genome_Version']].get('kegg', {}).get('enabled', False)
-            and config['deg_enrich_wrapper'][config['Genome_Version']]['kegg'].get('id_map') else []
-        ),
+        kegg_inputs = lambda wildcards: _kegg_inputs(),
     output:
         Enrichments_dir = directory("07.Enrichments/"),
     resources:
@@ -270,6 +285,7 @@ rule Enrichments:
         kegg_config = json.dumps(config['deg_enrich_wrapper'][config['Genome_Version']].get('kegg', {})),
     shell:
         """
+        rm -rf {output.Enrichments_dir:q}
         mkdir -p {output.Enrichments_dir:q}
         printf '%s' {params.kegg_config:q} > {output.Enrichments_dir:q}/kegg_config.json
         python {params.wrapper} \

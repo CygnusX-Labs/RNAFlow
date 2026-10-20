@@ -1,17 +1,16 @@
 module:
   id: "14.Report"
-  title: "最终分析报告生成(容器化 Quarto 渲染)"
+  title: "项目结果 JSON 导出与旧报告入口"
   snakefile: "rules/14.Report.smk"
   stage: "report"
   summary: >
-    先生成 project_summary.json 报告配置(项目元信息/样本统计/容器内输入文件路径),
-    再通过 docker/apptainer/singularity 容器化运行 Quarto 镜像,
-    产出最终交互式 HTML 分析报告 Analysis_Report/index.html。
+    独立生成 v2 project_summary.json(项目元信息/样本统计/相对路径/GO 与 KEGG 分组结果),
+    用于外部报告仓库。旧容器化 HTML 渲染入口保留但默认关闭。
   requires_helpers: ["utils.common"]
 
 rules:
   - name: generate_docker_json
-    summary: "读取样本表与报告专用交付清单,生成容器化报告系统所需的 project_summary.json 配置"
+    summary: "读取交付数据,导出区分 GO/KEGG、比较组与方向的 v2 项目结果 JSON"
     wildcards: []
     dynamic: false
     per_sample: false
@@ -28,16 +27,22 @@ rules:
       - name: sample_sheet
         port: "sample_sheet"
         pattern: "{sample_csv}"
+      - name: summary_builder
+        port: "project_summary_builder"
+        pattern: "rules/utils/project_summary.py"
+      - name: summary_schema
+        port: "project_summary_schema"
+        pattern: "schema/project_summary.schema.json"
     outputs:
       - name: json_file
         port: "project_summary_json"
         pattern: "{data_deliver}/report_data/project_summary.json"
-        kind: intermediate
+        kind: final
     config_requires:
-      - key: "report"
+      - key: "project_summary"
         type: "boolean"
         default: true
-        description: "报告模块开关(false 时报告目标不进 rule all)"
+        description: "项目 JSON 导出开关,独立于旧 HTML 报告"
       - key: "data_deliver"
         type: "string"
         description: "交付输出根目录(由 CLI --analysisyaml 注入,无默认值)"
@@ -89,8 +94,8 @@ rules:
     config_requires:
       - key: "report"
         type: "boolean"
-        default: true
-        description: "报告模块开关(false 时报告目标不进 rule all)"
+        default: false
+        description: "旧 HTML 渲染开关,默认关闭,不影响独立 JSON 导出"
       - key: "data_deliver"
         type: "string"
         description: "交付输出根目录(report_data/data 与 Analysis_Report 挂载源,由 CLI --analysisyaml 注入)"

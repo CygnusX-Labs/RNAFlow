@@ -121,7 +121,7 @@ def load_contrasts(csv_path, samples_dict):
         for _, row in df.iterrows():
             ctrl_grp = row['Control']
             treat_grp = row['Treat']
-            c_name = f"{ctrl_grp}_vs_{treat_grp}"
+            c_name = f"{treat_grp}_vs_{ctrl_grp}"
             
             # 3. 从 samples_dict 中筛选 BAM
             # 因为 load_samples 已经保证了每行都有 'bam' 键，这里可以直接取

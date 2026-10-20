@@ -65,7 +65,7 @@ deliverables:
     synonyms: ["差异基因分析", "差异表达分析", "差异基因列表", "上下调基因", "差异结果", "differential expression", "deg 表"]
   - id: go_enrichment
     name: "GO 富集分析结果"
-    description: "对全部 contrast 差异基因做的 GO 富集分析结果目录(07.Enrichments/,含各 contrast 富集表与图)"
+    description: "对全部 contrast 差异基因做的 GO/KEGG 富集分析结果目录(07.Enrichments/,文件名含 GO/KEGG 标识)"
     targets:
       - "07.Enrichments"
     keywords: ["富集分析", "GO", "GO 富集", "功能富集", "富集结果", "通路富集"]
@@ -136,8 +136,8 @@ deliverables:
     keywords: ["报告", "分析报告", "HTML 报告", "最终报告", "结题报告", "网页报告"]
     synonyms: ["分析报告", "项目报告", "结果报告", "报告 html", "交互式报告", "analysis report", "总报告"]
   - id: project_summary_json
-    name: "project_summary.json 报告配置"
-    description: "报告系统生成的项目汇总配置:项目元信息、样本统计、报告输入文件清单(report_data/project_summary.json)"
+    name: "project_summary.json 项目结果 JSON v2"
+    description: "独立于 HTML 渲染的项目结果:元信息、样本统计、相对路径及按比较组和方向组织的 GO/KEGG 结果(report_data/project_summary.json)"
     targets:
       - "{data_deliver}/report_data/project_summary.json"
     keywords: ["project_summary", "项目汇总", "报告配置", "项目信息", "样本统计"]

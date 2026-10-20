@@ -22,7 +22,8 @@ detect_novel_transcripts: false
 rmats: true
 gene_fusion: false
 deliver: true
-report: true
+project_summary: true
+report: false
 
 # These roots are normally inherited from config/reference.yaml.
 # Set them here when running on another machine.

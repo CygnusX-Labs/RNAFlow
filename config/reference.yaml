@@ -184,14 +184,18 @@ deg_enrich_wrapper:
   Lsat_Salinas_v8_wx:     
     gene_col: 'Entrez ID'   # Column name for gene identifiers in deg result
   ITAG4.1:
-    # Install KEGG.db in the enrichment R environment before enabling.
     kegg:
-      enabled: false
+      enabled: true
+      # KEGG.db 3.2.4 does not cover sly; the offline term2gene/term2name files
+      # below are used instead. organism is kept for reference only.
       organism: sly
       gene_col: ENSEMBL
       # Two columns, no header: DEG gene ID <TAB> KEGG gene ID.
-      # Relative to reference_path; set the actual location before enabling.
+      # Relative to reference_path.
       id_map: ITAG4.1/ITAG4.1.kegg.id
+      # Offline pathway annotation generated from the KEGG REST API.
+      term2gene: ITAG4.1/ITAG4.1.kegg.term2gene.tsv
+      term2name: ITAG4.1/ITAG4.1.kegg.term2name.tsv
     gene_col: 'ENSEMBL'   # Column name for gene identifiers in deg result (ITAG4.1 DEG table has ENSEMBL/Symbol, no Entrez)
   TAIR10.1:
     gene_col: 'Entrez ID'   # Column name for gene identifiers in deg result

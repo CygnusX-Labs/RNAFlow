@@ -1,5 +1,7 @@
 # RNAFlow - RNA-seq Analysis Pipeline
 
+> **结果导出 v2**：`project_summary: true` 导出独立的 GO/KEGG 结果，供外部报告仓库使用。内置 HTML 报告已弃用，默认 `report: false`；下文历史 `report: true` 示例会启用旧渲染器，该渲染器未适配 v2。详见 [JSON 接口契约](project_summary_json.md)。
+
 RNAFlow 是一个基于 Snakemake 的全自动化 RNA-seq 分析流程。它实现了从**原始测序数据 (Raw Data)** 到**标准化生物信息报告 (Interactive Report)**，再到 **AI 智能结果解读** 的端到端闭环分析。
 > **开源协议**：RNAFlow 采用 MIT 协议开源。详情请参见 [LICENSE](../LICENSE)。
 
@@ -747,7 +749,8 @@ snakemake \
 | `detect_novel_transcripts` | bool | false | 新转录本检测 (StringTie)，原`noval_Transcripts` |
 | `rmats` | bool | true | 可变剪接分析 (rMATS) |
 | `fastq_screen` | bool | true | 污染检测 (FastQ Screen) |
-| `report` | bool | true | 生成交互式HTML报告 |
+| `project_summary` | bool | true | 导出项目 JSON，区分 GO/KEGG 结果 |
+| `report` | bool | false | 已弃用的内置 HTML 报告 |
 
 ---
 

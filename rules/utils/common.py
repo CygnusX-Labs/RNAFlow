@@ -119,12 +119,17 @@ def delivery_outputs(config: Dict) -> List[str]:
     ]
 
 
-def report_outputs(config: Dict) -> List[str]:
+def project_summary_outputs(config: Dict) -> List[str]:
     return [
         os.path.join(config["data_deliver"], "report_data", "delivery_manifest.json"),
         os.path.join(config["data_deliver"], "report_data", "delivery_manifest.md5"),
         os.path.join(config["data_deliver"], "report_data", "delivery_details.log"),
         os.path.join(config["data_deliver"], "report_data", "project_summary.json"),
+    ]
+
+
+def report_outputs(config: Dict) -> List[str]:
+    return project_summary_outputs(config) + [
         os.path.join(config["data_deliver"], "Analysis_Report", "index.html"),
     ]
 
@@ -136,12 +141,15 @@ def DataDeliver(
     config = config or {}
     targets = AnalysisTargets(config, samples, all_contrasts)
     deliver_enabled = config.get("deliver", True) is not False
-    report_enabled = config.get("report", True) is not False
+    summary_enabled = config.get("project_summary", True) is not False
+    report_enabled = config.get("report", False) is not False
 
     if deliver_enabled:
         targets.extend(delivery_outputs(config))
     if report_enabled:
         targets.extend(report_outputs(config))
+    elif summary_enabled:
+        targets.extend(project_summary_outputs(config))
 
     if config.get("print_target"):
         rich_print("[bold green]Generated Target Files:[/bold green]")
@@ -151,7 +159,7 @@ def DataDeliver(
 
 def ReportData(config: dict = None) -> List[str]:
     """Backward-compatible report target collector."""
-    return report_outputs(config or {}) if (config or {}).get("report", True) is not False else []
+    return report_outputs(config or {}) if (config or {}).get("report", False) is not False else []
 
 
 def get_sample_data_dir(sample_id: str = None, config: dict = None) -> str:
