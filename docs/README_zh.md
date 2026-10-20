@@ -191,7 +191,7 @@ graph TD
 
 以下为 BioReport 生成的报告示例：
 
-![BioReport Example](doc/Report.png)
+![BioReport Example](Report.png)
 
 ## 📂 项目组织建议 (Project Organization)
 
@@ -664,7 +664,7 @@ RNAFlow 支持通过 Loki + Grafana 进行实时流程监控，所有日志将�
   - 访问 Grafana 界面并导入预设的监控面板
   - 查看以下示例截图了解监控效果：
 
-![Grafana Monitoring Example](doc/grafana.png)
+![Grafana Monitoring Example](grafana.png)
 
 > [!NOTE]
 > **Note**: 此监控功能需要安装 `snakemake_logger_plugin_rich_loguru` 插件 0.1.4 版本。
@@ -957,7 +957,7 @@ RNAFlow 采用**多组件独立版本**策略，各主要组件拥有独立的�
 - **Feature**: 弃用旧的 Seq 日志监控方案，更新为 Loki + Grafana 监控系统。
 - **Feature**: 增加`loki_url`配置项，用于配置 Loki 服务器地址以实现流程监控。
 - **Feature**: 更新`snakemake_logger_plugin_rich_loguru`插件至 0.1.4 版本，支持 Loki 日志推送。
-- **Documentation**: 添加 Grafana 监控示例截图 (见 `doc/grafana.png`)。
+- **Documentation**: 添加 Grafana 监控示例截图 (见 `grafana.png`)。
 - **Feature**: 增加`compress_bg`分析模块，用于`star`对比结果 `covrage` 文件压缩，节省存储空间。
 
 

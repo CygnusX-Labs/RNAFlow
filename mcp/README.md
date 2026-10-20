@@ -117,7 +117,6 @@ mcp/
 ├── models/           # Pydantic 数据模型
 ├── services/         # 业务逻辑 (项目、流程、系统)
 ├── db/               # 数据库会话与 CRUD
-├── skills/           # AI 提示词与技能文档
 ├── data/             # SQLite 数据库文件
 └── logs/mcp/         # 服务器运行日志
 ```

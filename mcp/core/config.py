@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 RNAFLOW_ROOT = Path(__file__).parent.parent.parent
 SKILLS_DIR = RNAFLOW_ROOT / "skills"
 CONFIG_DIR = RNAFLOW_ROOT / "config"
-EXAMPLES_DIR = Path(__file__).parent.parent / "skills" / "examples"
+EXAMPLES_DIR = SKILLS_DIR / "examples"
 MCP_CONFIG_FILE = Path(__file__).parent.parent / "mcp_config.yaml"
 
 
