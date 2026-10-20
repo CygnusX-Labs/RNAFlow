@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # *---utf-8---*
+# Version: RNAFlow v0.2.0
 # Author : JZHANG
 
 import sys

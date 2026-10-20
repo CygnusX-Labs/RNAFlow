@@ -55,7 +55,7 @@ rules:
         description: "参考基因组版本,写入报告项目元信息(由 CLI --analysisyaml 注入)"
       - key: "pipeline_version"
         type: "string"
-        default: "0.1.9"
+        default: "0.2.0"
         description: "流程版本号,写入报告项目元信息"
     conda: "envs/py3.12.yaml"
     resources_tier: "low_resource"

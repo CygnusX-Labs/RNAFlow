@@ -389,7 +389,7 @@ Create `container_env/<pipeline>_config.yaml` to customize:
 ```yaml
 # rnaflow_config.yaml
 pipeline_name: "RNAFlow"
-version: "0.1.9"
+version: "0.2.0"
 registry_prefix: "rnaflow"
 default_envs:
   - bwa2
@@ -1016,16 +1016,18 @@ RNAFlow adopts a **multi-component independent versioning** strategy. Each major
 
 | Component | Current Version | Description |
 |-----------|----------------|-------------|
-| **RNAFlow Pipeline** | `v0.1.9` | Core Snakemake workflow (QC, mapping, quantification, DEG, etc.) |
+| **RNAFlow Pipeline** | `v0.2.0` | Core Snakemake workflow (QC, mapping, quantification, DEG, etc.) |
 | **RNAFlow-MCP Server** | `v0.2.0` | MCP server for AI assistant integration (independent release cycle) |
 | **rnaflow-cli (Deliver Tool)** | `v0.2.0` | Rust-accelerated data delivery CLI (independent release cycle) |
 | **BioReport** | Same as Pipeline | Report generation system, version aligned with Pipeline |
 
-> **Note**: The Pipeline version (`v0.1.9`) is the authoritative version for the overall analysis workflow. MCP Server and Deliver Tool versions may differ as they are released on separate schedules.
+> **Note**: The Pipeline version (`v0.2.0`) is the authoritative version for the overall analysis workflow. MCP Server and Deliver Tool versions may differ as they are released on separate schedules.
 
 ## 📅 Development Roadmap
 
-### v0.1.9 Iteration Targets
+The following items remain planned work and are not release guarantees for v0.2.0.
+
+### Planned Analysis Extensions
 - **Dynamic Web Report Generation**: 
     - Implement dynamic generation of web reports for different workflows and modules.
     - **Implementation Logic**:
@@ -1043,7 +1045,7 @@ RNAFlow adopts a **multi-component independent versioning** strategy. Each major
 - **Cellular Deconvolution**:
     - Introduce CIBERSORTx/MuSiC algorithms using single-cell reference sets to parse cell type proportions in tissue samples.
 
-### v0.2.0 Iteration Targets
+### Planned LncRNA and Cloud Reference Extensions
 - **LncRNA Prediction and Analysis**:
     - Integrate CPAT/CPC2/LncFinder to identify novel LncRNAs and construct LncRNA-mRNA co-expression networks.
 - **Cloud-Native Reference Management**:
@@ -1061,6 +1063,10 @@ Further enhance AI's capabilities in bioinformatics analysis:
 3.  **Personalized Interpretation**: Generate customized analysis report content based on users' professional backgrounds and research interests.
 
 ## 📈 Version History
+
+### RNAFlow_v0.2.0 (2026-10-20)
+- **Version**: Updated the Pipeline version from v0.1.9 to v0.2.0 in the default configuration, report module manifest, workflow headers, and example configurations.
+- **Documentation**: Synchronized current-version references and clarified that roadmap features remain planned work. MCP Server and Deliver Tool retain their independent versions.
 
 ### RNAFlow_v0.1.9
 - **Feature**: Added `container_env/` - Automated Docker image builder for Conda environments.
@@ -1131,7 +1137,7 @@ Further enhance AI's capabilities in bioinformatics analysis:
 - Basic RNA-seq analysis workflow (QC, mapping, quantification).
 
 ---
-**Author**: JZHANG | **Version**: RNAFlow_v0.1.9
+**Author**: JZHANG | **Version**: RNAFlow_v0.2.0
 
 ## 🔗 Links
 - GitHub: [repository](https://github.com/xsx123123/RNAFlow)

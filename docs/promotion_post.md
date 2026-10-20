@@ -190,7 +190,7 @@ uv sync          # 使用 uv 管理依赖
 > **GitHub**：https://github.com/xsx123123/RNAFlow  
 > **License**：MIT（完全开源，可自由商用）
 
-RNAFlow 持续迭代中，当前版本 `v0.1.9+`，MCP Server `v0.2.0`。欢迎 Star、Fork 或提交 Issue 参与共建。
+RNAFlow 持续迭代中，当前版本 `v0.2.0`，MCP Server `v0.2.0`。欢迎 Star、Fork 或提交 Issue 参与共建。
 
 如果你正在寻找一款**无需手动拼脚本、支持 AI 交互、可即刻投入生产环境**的 RNA-seq 分析流水线，RNAFlow 值得一试。
 

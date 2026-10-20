@@ -899,16 +899,18 @@ RNAFlow 采用**多组件独立版本**策略，各主要组件拥有独立的�
 
 | 组件 | 当前版本 | 说明 |
 |------|---------|------|
-| **RNAFlow Pipeline** | `v0.1.9` | 核心 Snakemake 分析流程（QC、比对、定量、差异分析等） |
+| **RNAFlow Pipeline** | `v0.2.0` | 核心 Snakemake 分析流程（QC、比对、定量、差异分析等） |
 | **RNAFlow-MCP Server** | `v0.2.0` | AI 助手集成的 MCP 服务端（独立迭代） |
 | **rnaflow-cli (交付工具)** | `v0.2.0` | Rust 加速的数据交付 CLI（独立迭代） |
 | **BioReport** | 与 Pipeline 一致 | 报告生成系统，版本随 Pipeline 同步 |
 
-> **注意**：Pipeline 版本（`v0.1.9`）是整体分析流程的权威版本号。MCP Server 和交付工具的版本号可能不同，因为它们采用独立的发布节奏。
+> **注意**：Pipeline 版本（`v0.2.0`）是整体分析流程的权威版本号。MCP Server 和交付工具的版本号可能不同，因为它们采用独立的发布节奏。
 
 ## 📅 开发计划 (Roadmap)
 
-### v0.1.9 迭代目标 (Target Features for v0.1.9)
+以下内容仍为后续开发计划，不代表 v0.2.0 已实现的功能。
+
+### 计划中的分析扩展 (Planned Analysis Extensions)
 - **动态网页报告生成**: 
     - 实现不同分析流程与模块最终网页报告的动态生成。
     - **实现逻辑**：
@@ -926,7 +928,7 @@ RNAFlow 采用**多组件独立版本**策略，各主要组件拥有独立的�
 - **细胞组分去卷积 (Deconvolution)**:
     - 引入 CIBERSORTx/MuSiC 算法，利用单细胞参考集解析组织样本中的细胞类型比例。
 
-### v0.2.0 迭代目标 (Target Features for v0.2.0)
+### 计划中的 LncRNA 与云端参考扩展 (Planned LncRNA and Cloud Reference Extensions)
 - **LncRNA 预测与分析**:
     - 集成 CPAT/CPC2/LncFinder，鉴定新 LncRNA 并构建 LncRNA-mRNA 共表达网络。
 - **云原生参考基因组管理 (Cloud-Native Reference Management)**:
@@ -944,6 +946,10 @@ RNAFlow 采用**多组件独立版本**策略，各主要组件拥有独立的�
 3.  **个性化解读**：根据用户的专业背景和研究兴趣，定制化生成分析报告内容。
 
 ## 📈 版本历史
+
+### RNAFlow_v0.2.0 (2026-10-20)
+- **版本**：将默认配置、报告模块清单、流程入口注释及示例配置中的 Pipeline 版本从 v0.1.9 更新为 v0.2.0。
+- **文档**：同步当前版本标识，明确路线图功能仍为后续计划；MCP Server 和交付工具继续采用独立版本。
 
 ### RNAFlow_v0.1.9
 - **Optimization**: 修改 `call varinat` & `enrichments` & `report` 模块可能存在的bug。
@@ -1019,4 +1025,4 @@ RNAFlow 采用**多组件独立版本**策略，各主要组件拥有独立的�
 - 质量控制、比对和定量模块
 
 ---
-**Author**: JZHANG | **Version**: RNAFlow_v0.1.9
+**Author**: JZHANG | **Version**: RNAFlow_v0.2.0
