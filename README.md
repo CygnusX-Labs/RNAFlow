@@ -6,41 +6,37 @@
 
 [中文版本 (Chinese Version)](docs/README_zh.md)
 
-> **Result export v2:** `project_summary: true` exports separate GO/KEGG results for external reporting. The deprecated built-in HTML renderer defaults to `report: false`; historical `report: true` examples below opt into the old renderer, which is not adapted to v2. See [the JSON contract](docs/project_summary_json.md).
-
 RNAFlow is a fully automated RNA-seq analysis pipeline based on Snakemake. It implements an end-to-end closed-loop analysis from **Raw Data** to **Standardized Bioinformatics Reports (Interactive Report)**, and finally to **AI-powered results interpretation**.
 
 > **License**: RNAFlow is open-source software released under the MIT License. See [LICENSE](./LICENSE) for details.
 
 ## 🧩 Built on FlowFrame
 
-RNAFlow is developed on the [FlowFrame](https://github.com/xsx123123/FlowFrame) specification for multi-omics workflow development. FlowFrame standardizes the pipeline entrypoint, directory layout, configuration and schema validation, module dependency and target generation, data gating, resource management, and delivery/report interfaces. RNAFlow applies these conventions to RNA-seq, combining them with its transcriptome-specific toolchain and the BioReport system.
+RNAFlow is developed on the [FlowFrame](https://github.com/xsx123123/FlowFrame) specification for multi-omics workflow development. FlowFrame standardizes the pipeline entrypoint, directory layout, configuration and schema validation, module dependency and target generation, data gating, resource management, and delivery/report interfaces. RNAFlow applies these conventions to RNA-seq, combining them with its transcriptome-specific toolchain and the external BioReport reporting system.
 
 ## 📖 Table of Contents
 - [Built on FlowFrame](#-built-on-flowframe)
 - [Core Features](#-core-features)
 - [Analysis Workflow](#-analysis-workflow)
 - [System Architecture](#-system-architecture)
-- [BioReport System](#-bioreport-system)
-- [Directory Structure](#-directory-structure)
+- [Project Organization](#-project-organization-recommendations)
 - [Installation Guide](#-installation-guide)
 - [Container Image Builder](#-container-image-builder-new-in-v019)
 - [Reference Genome Builder](#-reference-genome-builder)
 - [AI Skills Usage Guide](#-ai-skills-usage-guide)
 - [Configuration Guide](#-configuration-guide)
 - [Usage Instructions](#-usage-instructions)
-- [Development Roadmap](#-development-roadmap)
+- [Development Roadmap](docs/ROADMAP.md)
 - [Version History](#-version-history)
 
 ## ✨ Core Features
 
-- **High Scalability**: Supports distributed task scheduling, perfectly adapted to cluster environments (e.g., Slurm, PBS), enabling large-scale parallel sample processing.
+- **High Scalability**: Supports distributed task scheduling and adapts to cluster environments such as Slurm and PBS, with Huawei Donau clusters supported through the `snakemake_executor_donau` plugin, enabling large-scale parallel sample processing.
 - **Portability**: Automatically manages all toolchains via Conda/Mamba, ensuring complete consistency between code and environment for reproducible analysis and "painless" migration.
 - **Modularity**: Based on Snakemake rules, analysis steps (QC, mapping, differential analysis, etc.) are logically decoupled, facilitating customized combinations and secondary development.
 - **High Transparency**: Built-in full-process MD5 verification, execution status monitoring (Benchmark), and detailed logging system ensure the analysis process is traceable and data is auditable.
-- **Real-time Monitoring**: Integrates Loki + Grafana monitoring system. Real-time workflow monitoring is achieved through the customized plugin `snakemake_logger_plugin_rich_loguru`, supporting structured log pushing and visual queries. (Note: The old Seq log monitoring solution has been deprecated).
-- **Automated Reporting**: Driven by Quarto, it automatically aggregates multi-dimensional analysis results to generate professional bioinformatics reports containing dynamic charts (Plotly) and interactive tables.
-- **AI-Powered Interpretation**: Integrates production-grade AI engines (e.g., Doubao, Qwen) to automatically transform complex differential genes and enrichment results into easy-to-understand biological insights.
+- **Automated Reporting**: Automatically aggregates MultiQC and organizes the delivery directory; results are exported as a versioned `project_summary.json` for [BioReport](https://github.com/xsx123123/bioreport), the reporting component of the CygnusX BioOps ecosystem, which generates HTML and PDF reports.
+- **AI-Powered Interpretation**: BioReport integrates production-grade AI engines (e.g., Doubao, Qwen) to automatically transform complex differential genes and enrichment results into easy-to-understand biological insights.
 
 ## 🛠 Analysis Workflow
 
@@ -65,7 +61,7 @@ RNAFlow covers the standard whole process of transcriptome analysis:
     *   **Fusion**: Arriba fusion gene identification.
     *   **Variants**: GATK single nucleotide variant detection.
     *   **Assembly**: StringTie transcript assembly.
-6.  **Reporting & Delivery**: Automatically aggregates MultiQC, generates BioReport interactive reports, and organizes the delivery directory.
+6.  **Reporting & Delivery**: Automatically aggregates MultiQC, organizes the delivery directory, and hands results to the [BioReport](https://github.com/xsx123123/bioreport) component of the CygnusX BioOps ecosystem for HTML and PDF report generation.
 
 ## 🏗️ System Architecture
 
@@ -110,29 +106,13 @@ graph TD
     end
 
     %% =======================
-    %% 3. Reporting Layer (BioReport)
+    %% 3. Reporting Layer (External BioReport)
     %% =======================
-    subgraph Report_Layer [BioReport System]
+    subgraph Report_Layer [BioReport - CygnusX BioOps]
         direction TB
-        
-        %% Architecture Pattern
-        Action_Init[Initialize Workspace]
-        Action_Inject[Inject Data & Config]
-        Action_Render[Quarto Render]
-        
-        %% Template System
-        Template[Template: RNA_Project]
-        
-        %% AI Sub-system
-        subgraph AI_Engine [AI Intelligence Engine]
-            direction TB
-            AI_Router{Model Router}
-            Model_Doubao[Volcengine / Doubao]
-            Model_Qwen[Aliyun / Qwen]
-            Token_Ctrl[Token Manager & Cost Calc]
-        end
-        
-        Output_Site[Static HTML Website]
+        Action_Export[Export project_summary.json]
+        Action_Render[Render Report]
+        Output_Site[HTML / PDF Report]
     end
 
     %% =======================
@@ -151,23 +131,9 @@ graph TD
     node_Quant --> Mod_DEG
     Modules --> node_Agg
     
-    %% Workflow -> Report
-    node_Agg -- "JSON / CSV / Plots" --> Action_Inject
-    Mod_DEG -- "Diff Genes Table" --> AI_Router
-    Mod_Enrich -- "Pathway Terms" --> AI_Router
-    
-    %% Report Internal Logic
-    Template --> Action_Init
-    Action_Init --> Action_Inject
-    Action_Inject --> Action_Render
-    
-    %% AI Integration
-    AI_Router --> Token_Ctrl
-    Token_Ctrl --> Model_Doubao
-    Token_Ctrl --> Model_Qwen
-    Model_Doubao -- "Natural Language Interpretation" --> Action_Inject
-    Model_Qwen -- "Fallback Interpretation" --> Action_Inject
-    
+    %% Workflow -> Reporting
+    node_Agg -- "JSON / CSV / Plots" --> Action_Export
+    Action_Export --> Action_Render
     Action_Render --> Output_Site
 
     %% =======================
@@ -176,37 +142,17 @@ graph TD
     classDef config fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef workflow fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
     classDef report fill:#e0f2f1,stroke:#004d40,stroke-width:2px;
-    classDef ai fill:#fff3e0,stroke:#e65100,stroke-width:2px,stroke-dasharray: 5 5;
 
     class Conf_Main,Conf_Ref,Conf_Env,Input_Data config;
     class node_QC,node_Map,node_Quant,Mod_DEG,Mod_Var,Mod_Spl,Mod_Fus,Mod_Asm,node_Agg workflow;
-    class Action_Init,Action_Inject,Action_Render,Template,Output_Site report;
-    class AI_Router,Model_Doubao,Model_Qwen,Token_Ctrl,AI_Engine ai;
+    class Action_Export,Action_Render,Output_Site report;
 ```
 
 ### 🔄 Core Data Flow Description
 1.  **Input Parsing**: `Snakemake` automatically reads `config.yaml` and identifies the input data structure.
 2.  **Core Computation**: Expression matrices are obtained through STAR + RSEM, and advanced analysis modules are triggered in parallel.
 3.  **Result Aggregation**: `15.deliver.smk` summarizes key results into the delivery directory.
-4.  **Smart Reporting**: The `BioReport` system extracts analysis results and calls the AI engine for biological interpretation, finally generating a `Quarto HTML` report.
-
-## 📊 BioReport System
-
-**BioReport**, located in the `report/` directory, is the core highlight of this pipeline:
-
-> [!WARNING]
-> **Testing Note**: The AI smart interpretation module is currently in internal testing and has not yet been integrated into the final standardized reports.
-
-*   **Architectural Concept**: Employs a "Copy-Inject-Render" pattern, dynamically injecting analysis results into Quarto templates.
-*   **AI Engine**:
-    *   **Multi-Cloud Architecture**: Supports Volcengine (Doubao) and Aliyun (Qwen).
-    *   **High Availability**: Supports automatic API failover (Fallback).
-    *   **Cost Control**: Built-in Token statistics and truncation strategies.
-*   **Interactive Experience**: Reports feature responsive layouts, side navigation, and searchable interactive data tables.
-
-Example report generated by BioReport:
-
-![BioReport Example](docs/Report.png)
+4.  **Report Export**: `project_summary.json`, result tables, and plots are exported for the external [BioReport](https://github.com/xsx123123/bioreport) system (CygnusX BioOps), which renders the final HTML/PDF report.
 
 ## 📂 Project Organization Recommendations
 
@@ -248,8 +194,8 @@ Upon completion, the pipeline automatically summarizes core results here for fin
 ├── 06_Enrichments/          # Functional enrichment analysis charts
 ├── 07_AS/                   # Alternative splicing results
 ├── Summary/                 # Overall project summary statistics
-├── Analysis_Report/         # Core Product: Final interactive web report entry
-├── report_data/             # Data supporting the web report
+├── Analysis_Report/         # Report output generated by external BioReport
+├── report_data/             # Data exported for BioReport
 └── delivery_manifest.json   # Delivery manifest and MD5 checksums
 ```
 
@@ -270,10 +216,8 @@ RNAFlow/
 │   ├── build_image.py       # Automated container builder with Rich logging
 │   ├── images/              # Dockerfile templates
 │   └── logs/                # Build logs
-├── report/                  # BioReport system source code
-│   ├── bioreport/           # Report generation core logic
-│   ├── templates/           # Quarto report templates
-│   └── ai/                  # AI interpretation engine
+├── report/                  # BioReport submodule (CygnusX BioOps)
+│                            # https://github.com/xsx123123/bioreport
 ├── skills/                  # AI Skills directory
 │   ├── SKILL.md            # AI assistant skill definitions
 │   ├── path_config.yaml    # Path configuration
@@ -304,8 +248,8 @@ RNAFlow/
 
 3. The pipeline uses conda environments for dependencies, which will be automatically created during execution.
 
-4. **(Required for Monitoring) Install Enhanced Logger Plugin**:
-   To enable beautiful console output, structured logging, and monitoring capabilities (as seen in the Usage examples), install `snakemake_logger_plugin_rich_loguru` 0.1.6 or newer:
+4. **(Optional) Install Enhanced Logger Plugin**:
+   To enable colored console output and structured logging, install `snakemake_logger_plugin_rich_loguru` 0.1.6 or newer:
    ```bash
    pip install snakemake_logger_plugin_rich_loguru>=0.1.6
    ```
@@ -658,8 +602,7 @@ Starting from RNAFlow v0.1.9+, all configuration items uniformly use the **snake
 # Basic Switches (all snake_case)
 only_qc: true                       # Run QC only
 deliver: true                       # Generate delivery manifests
-report: true                        # Generate HTML report
-report_engine: auto                 # auto/docker/apptainer/singularity
+project_summary: true               # Export project JSON for external BioReport
 deg: true                           # Differential expression analysis
 fastq_screen: true                  # FastQ Screen contamination check
 call_variant: true                 # Variant calling
@@ -714,14 +657,10 @@ rmats: true                         # Whether to perform alternative splicing an
 deg: true                           # Whether to perform differential expression analysis (DESeq2)
 fastq_screen: true                  # Whether to perform contamination check (FastQ Screen)
 deliver: true                       # Whether to organize deliverables and create manifests
-report: true                        # Whether to generate HTML report
-report_engine: auto                 # Container engine for reporting
+project_summary: true               # Export project JSON for external BioReport
 
 # Optional Configuration
 only_qc: true                       # Run mode: qc_only (Only QC), if true skips all downstream analysis
-
-# Monitoring Configuration
-loki_url: "http://your-loki-server:3100"  # Loki server address (for workflow monitoring)
 ```
 
 ### 2. Sample Information Table (sample_csv)
@@ -762,33 +701,8 @@ Besides project-specific configs, the `config/` directory contains default setti
     - `--quantMode TranscriptomeSAM` (Current) vs `None` (Default): Transcriptome quantification output enabled.
 - **`config/cluster_config.yaml`**: Cluster resource definitions, specifying thread and memory allocations for different tasks (Low, Medium, High resource).
 
-### 5. Loki + Grafana Monitoring Configuration (Optional)
-RNAFlow supports real-time workflow monitoring via Loki + Grafana. All logs are structured and pushed to a Loki server for visualization in Grafana:
-
-- **Configuration Parameters**:
-  - Add the `loki_url` field in `config.yaml` to specify the Loki server address:
-    ```yaml
-    loki_url: "http://122.205.67.97:3100"  # Loki server address
-    ```
-
-- **Usage**: Add the `--logger rich-loguru` parameter when running Snakemake to enable the logging plugin:
-  ```bash
-  snakemake --cores 60 --use-conda --conda-frontend mamba \
-            --logger rich-loguru \
-            --config analysisyaml=path/to/your_config.yaml
-  ```
-
-- **Viewing Monitoring**: In Grafana, you can query and monitor logs as follows:
-  - Access the Grafana interface and import pre-set monitoring dashboards.
-  - View the following example screenshot for monitoring effects:
-
-![Grafana Monitoring Example](docs/grafana.png)
-
-> [!NOTE]
-> **Note**: This monitoring feature requires `snakemake_logger_plugin_rich_loguru` 0.1.6 or newer.
-
-### 6. Cluster Configuration (Optional)
-If `execution_mode` is set to `cluster`, ensure related cluster plugins are installed (e.g., `snakemake-executor-plugin-slurm`). Finer resource allocation (threads, memory) can be edited in `config/cluster_config.yaml`.
+### 5. Cluster Configuration (Optional)
+If `execution_mode` is set to `cluster`, install the executor plugin for your scheduler, e.g. `snakemake-executor-plugin-slurm` for Slurm or `snakemake_executor_donau` for Huawei Donau. Finer resource allocation (threads, memory) can be edited in `config/cluster_config.yaml`.
 
 ## 💻 Usage Instructions
 
@@ -827,11 +741,7 @@ detect_novel_transcripts: true  # Novel transcript detection (formerly noval_Tra
 rmats: true                 # Alternative splicing analysis
 fastq_screen: true          # Contamination check
 deliver: true               # Generate delivery manifests
-report: true                # Generate HTML report
-report_engine: auto         # auto/docker/apptainer/singularity
-
-# Monitoring config (Optional)
-loki_url: "http://your-loki-server:3100"
+project_summary: true       # Export project JSON for external BioReport
 ```
 
 #### 2. Running the Analysis Pipeline
@@ -863,9 +773,7 @@ snakemake \
 | `rmats` | bool | true | Alternative splicing analysis (rMATS) |
 | `fastq_screen` | bool | true | Contamination check (FastQ Screen) |
 | `deliver` | bool | true | Organize outputs and generate delivery manifests |
-| `project_summary` | bool | true | Export project JSON with separate GO/KEGG results |
-| `report` | bool | false | Deprecated built-in HTML report |
-| `report_engine` | string | auto | Select Docker, Apptainer, or Singularity for report rendering |
+| `project_summary` | bool | true | Export the versioned project JSON consumed by external BioReport |
 
 ---
 
@@ -931,13 +839,11 @@ trimming, and merged QC reports are targeted.
   - Single sample and paired contrast results.
 - **Additional**: Includes junction_annotation and CIRCexplorer2 (circRNA) analysis.
 
-##### 7️⃣ `report: true` (Interactive Report)
-- **Tool**: BioReport (Quarto + Docker)
+##### 7️⃣ `project_summary: true` (Report Data Export)
 - **Output**:
-  - Interactive HTML report (`Analysis_Report/index.html`).
-  - Visualizations for all modules.
-  - AI biological interpretation (if configured).
-- **Note**: Requires Docker environment and report data directory.
+  - `project_summary.json` with separate GO/KEGG results.
+- **Purpose**: Provides the versioned JSON contract consumed by the external [BioReport](https://github.com/xsx123123/bioreport) system for HTML/PDF report generation.
+- **Interface**: See [the JSON contract](docs/project_summary_json.md).
 
 ##### 8️⃣ `gene_fusion: true` (Gene Fusion Detection)
 - **Tool**: Arriba
@@ -959,7 +865,7 @@ call_variant: true
 detect_novel_transcripts: true
 rmats: true
 fastq_screen: true
-report: true
+project_summary: true  # Export JSON for external BioReport
 ```
 
 **Scenario 2: Rapid QC Screening**
@@ -974,44 +880,12 @@ deg: true
 call_variant: false      # Skips variant calling
 detect_novel_transcripts: false  # Skips novel transcripts
 rmats: false             # Skips alternative splicing
-report: true
+project_summary: true    # Export JSON for external BioReport
 ```
 
-### Generating AI Reports (BioReport)
+### Report Generation (External BioReport)
 
-`RNAFlow` achieves deep integration of analysis and reporting. Report generation tasks are built into the `15.Report.smk` rule and will be **automatically triggered** after the main analysis completes.
-
-#### 1. Automatic Integration Mode (Recommended)
-When running standard analysis commands, the pipeline automatically collects results from all modules and calls BioReport to generate the final HTML report:
-```bash
-# Full workflow, reports generated in data_deliver/Analysis_Report
-snakemake --cores 60 --use-conda --config analysisyaml=config.yaml
-```
-
-#### 2. Independent Operation Mode (Modular Call)
-The report module can also be used as an independent tool, facilitating re-rendering or AI interpretation on existing data. Using a Docker image is recommended:
-
-> [!TIP]
-> **Tip**: You can build the Docker image locally using the `container_env/Flowcontainer` tool. See [Container Image Builder](#-container-image-builder-new-in-v019) for details.
-
-```bash
-docker run -it --rm \
-  --user $(id -u):$(id -g) \
-  -v /path/to/analysis_data:/data:rw \
-  -v /path/to/project_summary.json:/app/project_summary.json:rw \
-  -v /path/to/output_report:/workspace:rw \
-  bioreportrna:v0.0.5
-```
-**Parameter Descriptions:**
-- `-v ...:/data`: Mounts the data directory from upstream analysis.
-- `-v ...:/app/project_summary.json`: Mounts the project summary configuration.
-- `-v ...:/workspace`: Mounts the report output directory.
-
-#### 3. Manual Generation via Command Line
-If the environment is configured locally, navigate to the `report` directory and run:
-```bash
-python report/bioreport/main.py --input results_dir --output report_dir --ai
-```
+When `project_summary: true` is enabled, RNAFlow exports `project_summary.json` together with result tables and plots. The report itself is generated by [BioReport](https://github.com/xsx123123/bioreport), a separate repository in the CygnusX BioOps ecosystem that renders HTML and PDF deliverables. The interface between the pipeline and the reporting repository is documented in the [JSON contract](docs/project_summary_json.md).
 
 ## 📌 Versioning Strategy
 
@@ -1022,48 +896,13 @@ RNAFlow adopts a **multi-component independent versioning** strategy. Each major
 | **RNAFlow Pipeline** | `v0.2.0` | Core Snakemake workflow (QC, mapping, quantification, DEG, etc.) |
 | **RNAFlow-MCP Server** | `v0.2.0` | MCP server for AI assistant integration (independent release cycle) |
 | **rnaflow-cli (Deliver Tool)** | `v0.2.0` | Rust-accelerated data delivery CLI (independent release cycle) |
-| **BioReport** | Same as Pipeline | Report generation system, version aligned with Pipeline |
+| **BioReport** | Independent | External reporting system in the [bioreport](https://github.com/xsx123123/bioreport) repository (CygnusX BioOps) |
 
 > **Note**: The Pipeline version (`v0.2.0`) is the authoritative version for the overall analysis workflow. MCP Server and Deliver Tool versions may differ as they are released on separate schedules.
 
 ## 📅 Development Roadmap
 
-The following items remain planned work and are not release guarantees for v0.2.0.
-
-### Planned Analysis Extensions
-- **Dynamic Web Report Generation**: 
-    - Implement dynamic generation of web reports for different workflows and modules.
-    - **Implementation Logic**:
-        1. **Module State Awareness**: Records states of `DEG`, `rMATS`, `Variant`, etc., in `project_summary.json`.
-        2. **Dynamic Navigation Construction**: Before Quarto rendering, a Python script dynamically generates `_quarto.yml` based on module states, automatically hiding tabs for unrun analyses.
-        3. **Conditional Content Rendering**: Uses Python logic within `.qmd` templates to achieve dynamic loading and display of result chapters.
-
-- **WGCNA (Weighted Gene Co-expression Network Analysis)**: 
-    - Implement gene module clustering and phenotype association analysis to identify core Hub Genes.
-    - Export network files for Cytoscape visualization.
-- **GSVA (Gene Set Variation Analysis)**: 
-    - Calculate pathway activity scores for each sample, enabling differential analysis and visualization (heatmaps/correlations) of pathways.
-- **TF Regulatory Network Prediction (Transcription Factor)**:
-    - Integrate **PlantRegMap / PlantTFDB** for plants (e.g., Lettuce) to predict upstream transcription factor regulatory logic of differential genes.
-- **Cellular Deconvolution**:
-    - Introduce CIBERSORTx/MuSiC algorithms using single-cell reference sets to parse cell type proportions in tissue samples.
-
-### Planned LncRNA and Cloud Reference Extensions
-- **LncRNA Prediction and Analysis**:
-    - Integrate CPAT/CPC2/LncFinder to identify novel LncRNAs and construct LncRNA-mRNA co-expression networks.
-- **Cloud-Native Reference Management**:
-    - Adopt **BYOC (Bring Your Own Cloud)** strategy, empowering users to build their own biological data centers for "Stateless Portability".
-    - **Reference Factory**: Provides an independent Snakemake build process, supporting automatic synchronization to S3/OSS/MinIO.
-
-### Advanced Experimental Design Modules
-- To support more complex experimental designs (e.g., time-series analysis, two-factor interactions), the DEG module is planned for refactoring to support custom design formulas (`design_formula`).
-
-### AI Engine Enhancements
-Further enhance AI's capabilities in bioinformatics analysis:
-
-1.  **Multimodal Analysis**: Combine multiple data types like gene expression, variants, and splicing for comprehensive biological explanations.
-2.  **Real-time Learning**: Introduce online learning mechanisms for AI models to continuously update knowledge bases with the latest literature.
-3.  **Personalized Interpretation**: Generate customized analysis report content based on users' professional backgrounds and research interests.
+Planned analysis extensions, LncRNA and cloud-native reference management, advanced experimental design, and AI engine enhancements are tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## 📈 Version History
 
@@ -1144,4 +983,5 @@ Further enhance AI's capabilities in bioinformatics analysis:
 
 ## 🔗 Links
 - GitHub: [repository](https://github.com/xsx123123/RNAFlow)
+- BioReport: [bioreport](https://github.com/xsx123123/bioreport) (CygnusX BioOps)
 - LINUX DO: [Announcement](https://linux.do/) (Original)
