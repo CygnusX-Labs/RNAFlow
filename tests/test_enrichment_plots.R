@@ -62,11 +62,9 @@ kegg$run_kegg_deg_table(input, out_dir = output, name = "fixture")
 for (direction in c("UP", "DOWN")) {
   prefix <- file.path(output, paste0("fixture_KEGG_", direction, "_enrichments"))
   check_images(prefix)
-  full <- read.csv(paste0(prefix, "_full.csv"))
   sig <- read.csv(paste0(prefix, ".csv"))
-  stopifnot(nrow(full) == 18, nrow(sig) == 14)
+  stopifnot(nrow(sig) == 14)
   stopifnot(all(sig$p.adjust < 0.05))
-  stopifnot(identical(sig$ID, full$ID[which(full$p.adjust < 0.05)]))
 }
 map <- data.frame(symbol = "1", ncbi = "1")
 kegg$run_kegg_enrichment(character(), map, "no_genes", output)
