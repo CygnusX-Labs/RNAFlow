@@ -44,8 +44,8 @@ def _read_rows(path):
                     row[column] = number
             gene_ratio = row["GeneRatio"].strip()
             if "/" in gene_ratio:
-                numerator, denominator = gene_ratio.split("/", 1)
-                if float(numerator) < 0 or float(denominator) <= 0:
+                numerator, denominator = (float(part) for part in gene_ratio.split("/", 1))
+                if numerator < 0 or denominator < 0 or (denominator == 0 and numerator != 0):
                     raise ValueError(f"Invalid GeneRatio in {path}: {gene_ratio}")
             elif not math.isfinite(float(gene_ratio)):
                 raise ValueError(f"Invalid GeneRatio in {path}: {gene_ratio}")
