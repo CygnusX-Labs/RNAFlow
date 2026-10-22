@@ -1,5 +1,7 @@
 # 离线 KEGG 富集
 
+> 2026-10-21 调查更正：下文描述与当前执行代码存在差异。主 wrapper 未转发 TERM2GENE/TERM2NAME，R CLI 无相应参数，当前调用 `enrichKEGG()` 也未启用离线数据；有 id_map 时背景取整张映射表。下文的离线命令、背景说明和历史验证数字不能作为当前实现已通过验收的依据。现状证据与官方/自定义双路径建议见 [KEGG 模块调查](KEGG_module_investigation_2026-10-21.md)。
+
 KEGG 接在现有 GO 批量比较组流程中，分别分析 UP、DOWN。
 全程不做在线查询：要么使用 KEGG.db（`enrichKEGG(..., use_internal_data=TRUE)`），要么使用本地的 TERM2GENE/TERM2NAME 注释（`enricher()`）。
 
