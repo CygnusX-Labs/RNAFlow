@@ -35,6 +35,8 @@ parameter:
     bam2cram: 6             # BAM to CRAM compression
     bamCoverage: 6          # BigWig coverage track generation
     stringtie: 16           # StringTie transcript assembly
+    DEG: 40                 # Concurrent DEG R processes (bounded by the number of contrasts)
+    Enrichments: 40         # Concurrent contrast tasks; GO/KEGG run sequentially within each task
     gatk: 1                 # GATK variant calling (Java-based, memory managed separately)
     rmats: 4                # rMATS alternative splicing analysis
     rnaflow-cli: 8          # RNAFlow delivery tool
@@ -98,6 +100,7 @@ parameter:
   # Parameters for DESeq2 differential expression analysis
   DEG:
     PATH: ../src/src/DEG/run_deseq2.r    # DESeq2 R script path
+    PATH_py: ../src/src/DEG/run_deg_parallel.py  # Parallel contrast scheduler
     LFC: 1                  # Log2 Fold Change threshold for significance
     PVAL: 0.05              # Adjusted p-value threshold for significance
 

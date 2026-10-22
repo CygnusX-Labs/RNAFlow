@@ -1,38 +1,40 @@
+<p align="center">
+  <img src="RNAFlow_logo.png" alt="RNAFlow logo" width="200">
+</p>
+
 # RNAFlow - RNA-seq Analysis Pipeline
 
-> **结果导出 v2**：`project_summary: true` 导出独立的 GO/KEGG 结果，供外部报告仓库使用。内置 HTML 报告已弃用，默认 `report: false`；下文历史 `report: true` 示例会启用旧渲染器，该渲染器未适配 v2。详见 [JSON 接口契约](project_summary_json.md)。
+[English Version](../README.md)
 
 RNAFlow 是一个基于 Snakemake 的全自动化 RNA-seq 分析流程。它实现了从**原始测序数据 (Raw Data)** 到**标准化生物信息报告 (Interactive Report)**，再到 **AI 智能结果解读** 的端到端闭环分析。
 > **开源协议**：RNAFlow 采用 MIT 协议开源。详情请参见 [LICENSE](../LICENSE)。
 
 ## 🧩 基于 FlowFrame 构建
 
-RNAFlow 基于 [FlowFrame](https://github.com/xsx123123/FlowFrame) 多组学流程开发规范构建。FlowFrame 统一了流程入口、目录结构、配置与 Schema 校验、模块依赖与目标生成、数据准入、资源管理以及交付/报告接口；RNAFlow 在这些规范之上实现 RNA-seq 专属分析工具链与 BioReport 报告系统。
+RNAFlow 基于 [FlowFrame](https://github.com/xsx123123/FlowFrame) 多组学流程开发规范构建。FlowFrame 统一了流程入口、目录结构、配置与 Schema 校验、模块依赖与目标生成、数据准入、资源管理以及交付/报告接口；RNAFlow 在这些规范之上实现 RNA-seq 专属分析工具链与外部 BioReport 报告系统。
 
 ## 📖 目录
 - [基于 FlowFrame 构建](#-基于-flowframe-构建)
 - [核心特性](#-核心特性)
 - [分析工作流](#-分析工作流)
-- [系统架构](#-系统架构)
-- [BioReport 报告系统](#-bioreport-报告系统)
-- [目录结构](#-目录结构)
+- [系统架构](#-系统架构-system-architecture)
+- [项目组织建议](#-项目组织建议-project-organization)
 - [安装指南](#-安装指南)
 - [参考基因组构建](#-参考基因组构建)
 - [AI Skills 使用指南](#-ai-skills-使用指南)
-- [配置指南](#-配置指南)
+- [配置指南](#-配置指南-configuration)
 - [使用说明](#-使用说明)
-- [开发计划](#-开发计划)
+- [开发计划](ROADMAP_zh.md)
 - [版本历史](#-版本历史)
 
 ## ✨ 核心特性
 
-- **高可扩展性 (High Scalability)**：支持分布式任务调度，完美适配集群环境（如 Slurm, PBS），实现大规模样本并行处理。
+- **高可扩展性 (High Scalability)**：支持分布式任务调度，完美适配集群环境（如 Slurm、PBS），并可通过 `snakemake_executor_donau` 插件兼容华为多瑙集群，实现大规模样本并行处理。
 - **可迁移性 (Portability)**：通过 Conda/Mamba 自动管理所有工具链，实现代码与环境的完全一致，确保分析的可复现性与"无痛"迁移。
 - **模块化设计 (Modularity)**：基于 Snakemake 规则，各分析环节（QC、比对、差异分析等）逻辑解耦，便于定制化组合与二次开发。
 - **高度透明 (Transparency)**：内置全流程 MD5 校验、运行状态监控（Benchmark）与详实的日志系统，确保分析过程可回溯、数据可审计。
-- **实时监控 (Real-time Monitoring)**：集成 Loki + Grafana 监控系统，通过定制化插件 `snakemake_logger_plugin_rich_loguru` 实现实时流程监控，支持结构化日志推送与可视化查询。（注：已弃用旧的 Seq 日志监控方案）
-- **自动报告 (Automated Reporting)**：基于 Quarto 驱动，自动汇集多维分析结果，生成包含动态图表（Plotly）与交互式表格的专业生物信息学报告。
-- **AI 智能解读 (AI-Powered)**：集成生产级 AI 引擎（如豆包、通义千问），自动将复杂的差异基因和富集结果转化为易于理解的生物学洞察。
+- **自动报告 (Automated Reporting)**：自动汇总 MultiQC 并整理交付目录；分析结果以版本化的 `project_summary.json` 导出，交由 CygnusX BioOps 生态的 [BioReport](https://github.com/xsx123123/bioreport) 生成 HTML 与 PDF 报告。
+- **AI 智能解读 (AI-Powered)**：BioReport 集成生产级 AI 引擎（如豆包、通义千问），自动将复杂的差异基因和富集结果转化为易于理解的生物学洞察。
 
 ## 🛠 分析工作流
 
@@ -57,7 +59,7 @@ RNAFlow 涵盖了标准的转录组分析全过程：
     *   **Fusion**: Arriba 融合基因鉴定。
     *   **Variants**: GATK 单核苷酸变异检测。
     *   **Assembly**: StringTie 脚本组装。
-6.  **Reporting & Delivery**: 自动汇总 MultiQC，生成 BioReport 交互式报告，并整理交付目录。
+6.  **Reporting & Delivery**: 自动汇总 MultiQC，整理交付目录，并交由 CygnusX BioOps 生态的 [BioReport](https://github.com/xsx123123/bioreport) 生成 HTML 与 PDF 报告。
 
 ## 🏗️ 系统架构 (System Architecture)
 
@@ -102,29 +104,13 @@ graph TD
     end
 
     %% =======================
-    %% 3. Reporting Layer (BioReport)
+    %% 3. Reporting Layer (External BioReport)
     %% =======================
-    subgraph Report_Layer [BioReport System]
+    subgraph Report_Layer [BioReport - CygnusX BioOps]
         direction TB
-        
-        %% Architecture Pattern
-        Action_Init[Initialize Workspace]
-        Action_Inject[Inject Data & Config]
-        Action_Render[Quarto Render]
-        
-        %% Template System
-        Template[Template: RNA_Project]
-        
-        %% AI Sub-system
-        subgraph AI_Engine [AI Intelligence Engine]
-            direction TB
-            AI_Router{Model Router}
-            Model_Doubao[Volcengine / Doubao]
-            Model_Qwen[Aliyun / Qwen]
-            Token_Ctrl[Token Manager & Cost Calc]
-        end
-        
-        Output_Site[Static HTML Website]
+        Action_Export[Export project_summary.json]
+        Action_Render[Render Report]
+        Output_Site[HTML / PDF Report]
     end
 
     %% =======================
@@ -143,23 +129,9 @@ graph TD
     node_Quant --> Mod_DEG
     Modules --> node_Agg
     
-    %% Workflow -> Report
-    node_Agg -- "JSON / CSV / Plots" --> Action_Inject
-    Mod_DEG -- "Diff Genes Table" --> AI_Router
-    Mod_Enrich -- "Pathway Terms" --> AI_Router
-    
-    %% Report Internal Logic
-    Template --> Action_Init
-    Action_Init --> Action_Inject
-    Action_Inject --> Action_Render
-    
-    %% AI Integration
-    AI_Router --> Token_Ctrl
-    Token_Ctrl --> Model_Doubao
-    Token_Ctrl --> Model_Qwen
-    Model_Doubao -- "Natural Language Interpretation" --> Action_Inject
-    Model_Qwen -- "Fallback Interpretation" --> Action_Inject
-    
+    %% Workflow -> Reporting
+    node_Agg -- "JSON / CSV / Plots" --> Action_Export
+    Action_Export --> Action_Render
     Action_Render --> Output_Site
 
     %% =======================
@@ -168,37 +140,17 @@ graph TD
     classDef config fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
     classDef workflow fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
     classDef report fill:#e0f2f1,stroke:#004d40,stroke-width:2px;
-    classDef ai fill:#fff3e0,stroke:#e65100,stroke-width:2px,stroke-dasharray: 5 5;
 
     class Conf_Main,Conf_Ref,Conf_Env,Input_Data config;
     class node_QC,node_Map,node_Quant,Mod_DEG,Mod_Var,Mod_Spl,Mod_Fus,Mod_Asm,node_Agg workflow;
-    class Action_Init,Action_Inject,Action_Render,Template,Output_Site report;
-    class AI_Router,Model_Doubao,Model_Qwen,Token_Ctrl,AI_Engine ai;
+    class Action_Export,Action_Render,Output_Site report;
 ```
 
 ### 🔄 核心数据流说明
 1.  **输入解析**: `Snakemake` 自动读取 `config.yaml` 并识别输入数据结构。
 2.  **核心计算**: 通过 STAR + RSEM 获得表达矩阵，并行触发高级分析模块。
 3.  **结果汇聚**: `15.deliver.smk` 将关键结果汇总到交付目录。
-4.  **智能报告**: `BioReport` 系统提取分析结果并调用 AI 引擎进行生物学解读，最终生成 `Quarto HTML` 报告。
-
-## 📊 BioReport 报告系统
-
-位于 `report/` 目录下的 **BioReport** 是本流程的核心亮点：
-
-> [!WARNING]
-> **测试说明**：AI 智能解读模块目前仍处于内部测试阶段，尚未整合至最终生成的标准化报告中。
-
-*   **架构理念**：采用 "Copy-Inject-Render" 模式，将分析结果动态注入 Quarto 模板。
-*   **AI 引擎**：
-    *   **多云架构**：支持火山引擎 (Doubao) 和阿里云 (Qwen)。
-    *   **高可用**：支持 API 自动故障切换 (Fallback)。
-    *   **成本控制**：内置 Token 统计与截断策略。
-*   **交互体验**：报告包含响应式布局、侧边导航以及支持搜索的交互式数据表。
-
-以下为 BioReport 生成的报告示例：
-
-![BioReport Example](Report.png)
+4.  **报告导出**: 导出 `project_summary.json`、结果表格与图表，交由外部 [BioReport](https://github.com/xsx123123/bioreport) 系统（CygnusX BioOps）生成最终的 HTML/PDF 报告。
 
 ## 📂 项目组织建议 (Project Organization)
 
@@ -240,8 +192,8 @@ Project_Root/
 ├── 06_Enrichments/          # 功能富集分析图表
 ├── 07_AS/                   # 可变剪接分析结果
 ├── Summary/                 # 项目总体汇总统计
-├── Analysis_Report/         # 核心产物：最终交互式网页报告入口
-├── report_data/             # 网页报告支撑数据
+├── Analysis_Report/         # 外部 BioReport 生成的报告入口
+├── report_data/             # 提供给 BioReport 的报告数据
 └── delivery_manifest.json   # 交付清单与 MD5 校验
 ```
 
@@ -258,10 +210,8 @@ RNAFlow/
 │   ├── 15.deliver.smk      # 结果整理
 │   └── ...
 ├── envs/                    # Conda 环境定义文件 (YAML)
-├── report/                  # BioReport 报告系统源码
-│   ├── bioreport/           # 报告生成核心逻辑
-│   ├── templates/           # Quarto 报告模板
-│   └── ai/                  # AI 解读引擎
+├── report/                  # BioReport 子模块 (CygnusX BioOps)
+│                            # https://github.com/xsx123123/bioreport
 ├── skills/                  # AI Skills 目录
 │   ├── SKILL.md            # AI 助手技能定义
 │   ├── path_config.yaml    # 路径配置
@@ -292,10 +242,10 @@ RNAFlow/
 
 3. The pipeline uses conda environments for dependencies, which will be automatically created during execution.
 
-4. **(Required for Monitoring) Install Enhanced Logger Plugin**:
-   To enable beautiful console output, structured logging, and monitoring capabilities (as seen in the Usage examples), install the `snakemake_logger_plugin_rich_loguru` plugin (version 0.1.4):
+4. **(可选) 安装增强日志插件**：
+   如需彩色控制台输出与结构化日志，请安装 `snakemake_logger_plugin_rich_loguru` 0.1.6 或更高版本：
    ```bash
-   pip install snakemake_logger_plugin_rich_loguru==0.1.4
+   pip install snakemake_logger_plugin_rich_loguru>=0.1.6
    ```
    > [!NOTE]
    > **说明**：增强型日志插件可通过 PyPI 获取，执行流程时将自动安装。
@@ -554,7 +504,8 @@ RNAFlow v0.1.9+ 版本开始，所有配置项统一使用 **snake_case** (小�
 ```yaml
 # 基础开关 (均为 snake_case)
 only_qc: true                       # 仅运行QC
-report: true                        # 生成HTML报告
+deliver: true                       # 生成交付清单
+project_summary: true               # 导出项目 JSON 供外部 BioReport 使用
 deg: true                           # 差异表达分析
 fastq_screen: true                  # FastQ Screen污染检测
 call_variant: true                 # 变异检测
@@ -604,13 +555,11 @@ detect_novel_transcripts: true      # 是否进行新转录本组装 (StringTie)
 rmats: true                         # 是否进行可变剪接分析 (rMATS)
 deg: true                           # 是否进行差异表达分析 (DESeq2)
 fastq_screen: true                  # 是否进行污染检测 (FastQ Screen)
-report: true                        # 是否生成HTML报告
+deliver: true                       # 是否整理交付目录并生成清单
+project_summary: true               # 导出项目 JSON 供外部 BioReport 使用
 
 # 可选配置
 only_qc: true                       # 运行模式: qc_only (仅质控), 为true时跳过所有下游分析
-
-# 监控配置
-loki_url: "http://122.205.67.97:3100"  # Loki 服务器地址 (用于流程监控)
 ```
 
 ### 2. 样本信息表 (sample_csv)
@@ -651,33 +600,8 @@ Wo408,CKX2
     - `--quantMode TranscriptomeSAM` (当前配置) vs `None` (默认参数): 开启转录组定量输出：直接生成比对到转录本的 BAM 文件，方便后续使用 RSEM 或 Salmon 进行定量。
 - **`config/cluster_config.yaml`**: 集群资源定义，规定了不同任务（Low, Medium, High resource）对应的线程和内存分配。
 
-### 5. Loki + Grafana 监控配置 (可选)
-RNAFlow 支持通过 Loki + Grafana 进行实时流程监控，所有日志将被结构化推送至 Loki 服务器并通过 Grafana 进行可视化展示：
-
-- **配置参数**：
-  - 在 `config.yaml` 中添加 `loki_url` 字段，指定 Loki 服务器地址：
-    ```yaml
-    loki_url: "http://122.205.67.97:3100"  # Loki 服务器地址
-    ```
-
-- **使用方法**：在运行 Snakemake 时添加 `--logger rich-loguru` 参数以启用日志插件：
-  ```bash
-  snakemake --cores 60 --use-conda --conda-frontend mamba \
-            --logger rich-loguru \
-            --config analysisyaml=path/to/your_config.yaml
-  ```
-
-- **查看监控**：在 Grafana 中可通过以下方式进行日志查询和监控：
-  - 访问 Grafana 界面并导入预设的监控面板
-  - 查看以下示例截图了解监控效果：
-
-![Grafana Monitoring Example](grafana.png)
-
-> [!NOTE]
-> **Note**: 此监控功能需要安装 `snakemake_logger_plugin_rich_loguru` 插件 0.1.4 版本。
-
-### 6. 集群配置 (可选)
-如果 `execution_mode` 设置为 `cluster`，请确保已安装相关集群插件（如 `snakemake-executor-plugin-slurm`）。更细致的资源分配（线程、内存）可编辑 `config/cluster_config.yaml`。
+### 5. 集群配置 (可选)
+如果 `execution_mode` 设置为 `cluster`，请安装对应调度器的执行插件，例如 Slurm 使用 `snakemake-executor-plugin-slurm`，华为多瑙集群使用 `snakemake_executor_donau`。更细致的资源分配（线程、内存）可编辑 `config/cluster_config.yaml`。
 
 ## 💻 使用说明
 
@@ -715,10 +639,8 @@ call_variant: true        # 变异检测
 detect_novel_transcripts: true  # 新转录本检测 (原noval_Transcripts)
 rmats: true                 # 可变剪接分析
 fastq_screen: true          # 污染检测
-report: true                # 生成HTML报告
-
-# 监控配置 (可选)
-loki_url: "http://your-loki-server:3100"
+deliver: true               # 整理交付目录并生成清单
+project_summary: true       # 导出项目 JSON 供外部 BioReport 使用
 ```
 
 #### 2. 运行分析流程
@@ -749,8 +671,8 @@ snakemake \
 | `detect_novel_transcripts` | bool | false | 新转录本检测 (StringTie)，原`noval_Transcripts` |
 | `rmats` | bool | true | 可变剪接分析 (rMATS) |
 | `fastq_screen` | bool | true | 污染检测 (FastQ Screen) |
-| `project_summary` | bool | true | 导出项目 JSON，区分 GO/KEGG 结果 |
-| `report` | bool | false | 已弃用的内置 HTML 报告 |
+| `deliver` | bool | true | 整理交付目录并生成交付清单 |
+| `project_summary` | bool | true | 导出版本化项目 JSON，供外部 BioReport 使用 |
 
 ---
 
@@ -814,13 +736,11 @@ snakemake \
   - 单样本和成对对比结果
 - **附加**：包含junction_annotation和CIRCexplorer2(circRNA)分析
 
-##### 7️⃣ `report: true` (交互式报告)
-- **工具**：BioReport (Quarto + Docker)
+##### 7️⃣ `project_summary: true` (报告数据导出)
 - **输出**：
-  - 交互式HTML报告 (`Analysis_Report/index.html`)
-  - 包含所有模块的可视化结果
-  - AI智能解读 (如配置)
-- **注意**：需要Docker环境和报告数据目录
+  - 包含独立 GO/KEGG 结果的 `project_summary.json`
+- **用途**：为外部 [BioReport](https://github.com/xsx123123/bioreport) 系统生成 HTML/PDF 报告提供版本化 JSON 契约。
+- **接口**：详见 [JSON 接口契约](project_summary_json.md)。
 
 ##### 8️⃣ `gene_fusion: true` (基因融合检测)
 - **工具**：Arriba
@@ -842,7 +762,7 @@ call_variant: true
 detect_novel_transcripts: true
 rmats: true
 fastq_screen: true
-report: true
+project_summary: true  # 导出 JSON 供外部 BioReport 使用
 ```
 
 **场景2：快速QC初筛**
@@ -857,44 +777,12 @@ deg: true
 call_variant: false      # 跳过变异检测
 detect_novel_transcripts: false  # 跳过新转录本
 rmats: false             # 跳过可变剪接
-report: true
+project_summary: true    # 导出 JSON 供外部 BioReport 使用
 ```
 
-### 生成 AI 报告 (BioReport)
+### 生成报告（外部 BioReport）
 
-`RNAFlow` 实现了分析与报告的深度集成。报告生成任务已内置于 `15.Report.smk` 规则中，在主分析流程完成后会**自动触发**渲染逻辑。
-
-#### 1. 自动集成模式 (推荐)
-当您运行标准的分析指令时，流程会自动收集所有模块的结果并调用 BioReport 生成最终 HTML 报告：
-```bash
-# 运行完整流程，报告将自动生成在 data_deliver/Analysis_Report 目录
-snakemake --cores 60 --use-conda --config analysisyaml=config.yaml
-```
-
-#### 2. 独立运行模式 (模块化调用)
-报告模块也可以作为独立工具使用，便于在已有数据的基础上重新渲染或进行 AI 解读。建议使用 Docker 镜像以避免环境配置问题：
-
-> [!TIP]
-> **提示**：您可以使用 `container_env/Flowcontainer` 工具在本地构建 Docker 镜像。详情请参见 [容器镜像构建器](#-容器镜像构建器-v019新增)。
-
-```bash
-docker run -it --rm \
-  --user $(id -u):$(id -g) \
-  -v /path/to/analysis_data:/data:rw \
-  -v /path/to/project_summary.json:/app/project_summary.json:rw \
-  -v /path/to/output_report:/workspace:rw \
-  bioreportrna:v0.0.5
-```
-**参数说明：**
-- `-v ...:/data`: 挂载上游分析生成的数据目录。
-- `-v ...:/app/project_summary.json`: 挂载项目汇总配置文件。
-- `-v ...:/workspace`: 挂载报告输出目录。
-
-#### 3. 命令行手动生成
-若已在本地配置好环境，也可进入 `report` 目录直接运行：
-```bash
-python report/bioreport/main.py --input results_dir --output report_dir --ai
-```
+启用 `project_summary: true` 后，RNAFlow 会导出 `project_summary.json` 以及结果表格和图表。报告由 CygnusX BioOps 生态中的独立仓库 [BioReport](https://github.com/xsx123123/bioreport) 生成，支持 HTML 与 PDF 交付物。流程与报告仓库之间的数据接口详见 [JSON 接口契约](project_summary_json.md)。
 
 ## 📌 版本号体系说明
 
@@ -905,48 +793,13 @@ RNAFlow 采用**多组件独立版本**策略，各主要组件拥有独立的�
 | **RNAFlow Pipeline** | `v0.2.0` | 核心 Snakemake 分析流程（QC、比对、定量、差异分析等） |
 | **RNAFlow-MCP Server** | `v0.2.0` | AI 助手集成的 MCP 服务端（独立迭代） |
 | **rnaflow-cli (交付工具)** | `v0.2.0` | Rust 加速的数据交付 CLI（独立迭代） |
-| **BioReport** | 与 Pipeline 一致 | 报告生成系统，版本随 Pipeline 同步 |
+| **BioReport** | 独立迭代 | [bioreport](https://github.com/xsx123123/bioreport) 仓库中的外部报告系统（CygnusX BioOps） |
 
 > **注意**：Pipeline 版本（`v0.2.0`）是整体分析流程的权威版本号。MCP Server 和交付工具的版本号可能不同，因为它们采用独立的发布节奏。
 
 ## 📅 开发计划 (Roadmap)
 
-以下内容仍为后续开发计划，不代表 v0.2.0 已实现的功能。
-
-### 计划中的分析扩展 (Planned Analysis Extensions)
-- **动态网页报告生成**: 
-    - 实现不同分析流程与模块最终网页报告的动态生成。
-    - **实现逻辑**：
-        1. **模块状态感知**：在 `project_summary.json` 中记录 `DEG`、`rMATS`、`Variant` 等模块的开启状态。
-        2. **动态导航构建**：在 Quarto 渲染前，通过 Python 脚本根据模块状态动态生成 `_quarto.yml`，自动隐藏未运行分析的标签页。
-        3. **条件内容渲染**：在 `.qmd` 模板中使用 Python 逻辑判断，实现结果章节的动态加载与展示。
-
-- **WGCNA (加权基因共表达网络分析)**: 
-    - 实现基因模块聚类与表型关联分析，识别核心 Hub Gene。
-    - 导出网络文件，支持 Cytoscape 可视化。
-- **GSVA (基因集变异分析)**: 
-    - 为每个样本计算通路活性分数，实现通路的差异化分析与可视化（热图/相关性）。
-- **TF 调控网络预测 (Transcription Factor)**:
-    - 针对植物（莴苣等）集成 **PlantRegMap / PlantTFDB**，预测差异基因的上游转录因子调控逻辑。
-- **细胞组分去卷积 (Deconvolution)**:
-    - 引入 CIBERSORTx/MuSiC 算法，利用单细胞参考集解析组织样本中的细胞类型比例。
-
-### 计划中的 LncRNA 与云端参考扩展 (Planned LncRNA and Cloud Reference Extensions)
-- **LncRNA 预测与分析**:
-    - 集成 CPAT/CPC2/LncFinder，鉴定新 LncRNA 并构建 LncRNA-mRNA 共表达网络。
-- **云原生参考基因组管理 (Cloud-Native Reference Management)**:
-    - 采用 **BYOC (Bring Your Own Cloud)** 策略，赋能用户构建属于自己的生物数据中心，实现"无状态迁移" (Stateless Portability)。
-    - **Reference Factory**: 提供独立的 Snakemake 构建流程，支持自动同步至 S3/OSS/MinIO。
-
-### 高级差异分析模块 (Advanced Experimental Design)
-- 为了支持更复杂的生物学实验设计（如时间序列分析、双因素交互作用），计划重构 DEG 模块，支持自定义设计公式 (`design_formula`)。
-
-### AI 引擎增强 (AI Engine Enhancement)
-进一步提升 AI 在生物信息学分析中的应用能力：
-
-1.  **多模态分析**：结合基因表达、变异、剪接等多种数据类型，提供综合性的生物学解释。
-2.  **实时学习**：引入在线学习机制，使 AI 模型能够根据最新文献不断更新知识库。
-3.  **个性化解读**：根据用户的专业背景和研究兴趣，定制化生成分析报告内容。
+后续分析扩展、LncRNA 与云端参考管理、高级实验设计及 AI 引擎增强计划，请参见 [docs/ROADMAP_zh.md](ROADMAP_zh.md)。
 
 ## 📈 版本历史
 

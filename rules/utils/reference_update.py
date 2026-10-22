@@ -20,6 +20,7 @@ PATH_KEYS = {
     "term2gene",
     "term2name",
     "annotation_table",
+    "kegg_pathway_names",
 }
 
 

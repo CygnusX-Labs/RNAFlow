@@ -223,19 +223,23 @@ rule DEG:
         samples = config['sample_csv'],
         paired = config.get('paired_csv', ''),
         PATH = workflow.source_path(config['parameter']['DEG']['PATH']),
+        wrapper = workflow.source_path(config['parameter']['DEG'].get('PATH_py', '../src/src/DEG/run_deg_parallel.py')),
+        worker_logs = "logs/06.DEG/contrasts",
         LFC = config['parameter']['DEG']['LFC'],
         PVAL = config['parameter']['DEG']['PVAL'],
     threads:
-        1
+        config['parameter'].get('threads', {}).get('DEG', 4)
     shell:
         """
-        chmod +x {params.PATH} && \
-        Rscript {params.PATH} -c {input.counts} \
-                -m {params.samples} \
-                -p {params.paired} \
-                -o {output.deg_dir} \
+        python {params.wrapper:q} --rscript {params.PATH:q} \
+                -c {input.counts:q} \
+                -m {params.samples:q} \
+                -p {params.paired:q} \
+                -o {output.deg_dir:q} \
+                --threads {threads} \
+                --log-dir {params.worker_logs:q} \
                 --lfc={params.LFC} \
-                --pval={params.PVAL} &> {log}
+                --pval={params.PVAL} > {log:q} 2>&1
         """
 
 rule Enrichments:
@@ -292,13 +296,21 @@ rule Enrichments:
         annotation_converter = workflow.source_path(config['parameter']['Enrichments'].get('PATH_annotation_converter', '../src/src/Enrichments/annotation_to_enrichment.py')),
         annotation_table = config['STAR_index'][config['Genome_Version']].get('annotation_table', ''),
         annotation_format = config['STAR_index'][config['Genome_Version']].get('annotation_format', 'eggnog'),
+        kegg_pathway_names = config['STAR_index'][config['Genome_Version']].get('kegg_pathway_names', ''),
         kegg_config = json.dumps(config['deg_enrich_wrapper'][config['Genome_Version']].get('kegg', {})),
+        worker_logs = "logs/07.Enrichments/contrasts",
+    threads:
+        config['parameter'].get('threads', {}).get('Enrichments', 4)
     shell:
         """
         rm -rf {output.Enrichments_dir:q}
         mkdir -p {output.Enrichments_dir:q}
         printf '%s' {params.kegg_config:q} > {output.Enrichments_dir:q}/kegg_config.json
         if [ -n {params.annotation_table:q} ]; then
+            pathway_names_arg=""
+            if [ -n {params.kegg_pathway_names:q} ]; then
+                pathway_names_arg="--kegg-pathway-names {params.kegg_pathway_names:q}"
+            fi
             python {params.annotation_converter:q} \
                 --input {params.annotation_table:q} \
                 --format {params.annotation_format:q} \
@@ -306,6 +318,7 @@ rule Enrichments:
                 --kegg-id-map {output.Enrichments_dir:q}/kegg_id_map.tsv \
                 --kegg-term2gene {output.Enrichments_dir:q}/kegg_term2gene.tsv \
                 --kegg-term2name {output.Enrichments_dir:q}/kegg_term2name.tsv \
+                $pathway_names_arg \
                 --kegg-config {output.Enrichments_dir:q}/kegg_config.json
             go_assoc={output.Enrichments_dir:q}/go_annotation.tsv
         else
@@ -322,6 +335,8 @@ rule Enrichments:
             --gene_regex '{params.gene_regex}' \
             --kegg_config {output.Enrichments_dir:q}/kegg_config.json \
             --kegg_rscript {params.kegg_rscript:q} \
+            --threads {threads} \
+            --log-dir {params.worker_logs:q} \
             --padj_th {params.padj_th} --lfc_th {params.lfc_th} \
             --cutoff {params.cutoff} > {log} 2>&1
         """

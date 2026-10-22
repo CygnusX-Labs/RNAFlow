@@ -170,8 +170,9 @@ STAR_index:
       rsem_index_dir: ziyushenshu_v1/RSEM_ziyushenshu_v1/                                      # RSEM INDEX PATH
       bed12: ziyushenshu_v1/ziyushenshu_v1.bed12                                               # GENE RANGES FOR GENE COVERAGE ANALYSIS
       go_annotation: ziyushenshu_v1/ziyushenshu_v1_go_annotation.tsv                           # GO TERM ANNOTATION (gene-level, from eggNOG)
-      annotation_table: /data/jzhang/project/Temp/Dioscorea_alata_26.10.9/Dioscorea_alata_26.10.9_006T2T/03.merge/eggnog_highconf.tsv
+      annotation_table: ziyushenshu_v1/ziyushenshu_v1_rnaflow_annotation.tsv                   # GO & KEGG ANNOTATION TABLE (from AnnoFlow)
       annotation_format: eggnog
+      kegg_pathway_names: ziyushenshu_v1/ziyushenshu_v1_kegg_pathway_names.tsv                 # ko##### PATHWAY ID -> NAME (from AnnoFlow)
       ref_all: ziyushenshu_v1/ziyushenshu_v1_ref_all.txt                                       # gene information
 
     GO:
