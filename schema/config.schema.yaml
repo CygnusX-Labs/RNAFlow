@@ -42,6 +42,16 @@ definitions:
       ploidy:
         type: "number"
         description: "Ploidy value"
+      go_annotation:
+        type: "string"
+        description: "Genome-specific gene-to-GO association file"
+      annotation_table:
+        type: "string"
+        description: "Annotation table used to build GO and KEGG maps for non-model species"
+      annotation_format:
+        type: "string"
+        enum: ["eggnog"]
+        description: "Column layout of annotation_table"
     required: ["index", "genome_fa", "genome_gtf", "genome_gff", "rsem_index", "rsem_index_dir", "bed12"]
   keggConfig:
     type: "object"

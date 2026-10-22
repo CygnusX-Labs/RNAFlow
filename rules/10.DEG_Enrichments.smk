@@ -34,8 +34,14 @@ def _kegg_inputs():
             kegg.get('id_map'),
             kegg.get('term2gene'),
             kegg.get('term2name'),
+            kegg.get('annotation_table'),
         ) if path
     ]
+
+
+def _enrichment_annotation_inputs():
+    genome = config.get('STAR_index', {}).get(config['Genome_Version'], {})
+    return [genome['annotation_table']] if genome.get('annotation_table') else []
 
 
 rule gene_dist:
@@ -262,6 +268,7 @@ rule Enrichments:
     input:
         DEG_info = "06.DEG/DESEQ2/All_Contrast_DEG_Statistics.csv",
         kegg_inputs = lambda wildcards: _kegg_inputs(),
+        annotation_table = lambda wildcards: _enrichment_annotation_inputs(),
     output:
         Enrichments_dir = directory("07.Enrichments/"),
     resources:
@@ -282,18 +289,34 @@ rule Enrichments:
         padj_th = config['parameter']['DEG']['PVAL'],
         lfc_th = config['parameter']['DEG']['LFC'],
         kegg_rscript = workflow.source_path(config['parameter']['Enrichments'].get('PATH_kegg', '../src/src/Enrichments/kegg_enricher.r')),
+        annotation_converter = workflow.source_path(config['parameter']['Enrichments'].get('PATH_annotation_converter', '../src/src/Enrichments/annotation_to_enrichment.py')),
+        annotation_table = config['STAR_index'][config['Genome_Version']].get('annotation_table', ''),
+        annotation_format = config['STAR_index'][config['Genome_Version']].get('annotation_format', 'eggnog'),
         kegg_config = json.dumps(config['deg_enrich_wrapper'][config['Genome_Version']].get('kegg', {})),
     shell:
         """
         rm -rf {output.Enrichments_dir:q}
         mkdir -p {output.Enrichments_dir:q}
         printf '%s' {params.kegg_config:q} > {output.Enrichments_dir:q}/kegg_config.json
+        if [ -n {params.annotation_table:q} ]; then
+            python {params.annotation_converter:q} \
+                --input {params.annotation_table:q} \
+                --format {params.annotation_format:q} \
+                --go-assoc {output.Enrichments_dir:q}/go_annotation.tsv \
+                --kegg-id-map {output.Enrichments_dir:q}/kegg_id_map.tsv \
+                --kegg-term2gene {output.Enrichments_dir:q}/kegg_term2gene.tsv \
+                --kegg-term2name {output.Enrichments_dir:q}/kegg_term2name.tsv \
+                --kegg-config {output.Enrichments_dir:q}/kegg_config.json
+            go_assoc={output.Enrichments_dir:q}/go_annotation.tsv
+        else
+            go_assoc={params.go_annotation:q}
+        fi
         python {params.wrapper} \
             --rscript {params.r_script} \
             --deg_info {input.DEG_info} \
             --deg_dir {params.deg_dir} \
             -o {params.obo} \
-            -a {params.go_annotation} \
+            -a "$go_assoc" \
             -d {output.Enrichments_dir} \
             --gene_col '{params.gene_col}' \
             --gene_regex '{params.gene_regex}' \

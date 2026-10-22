@@ -19,6 +19,7 @@ PATH_KEYS = {
     "id_map",
     "term2gene",
     "term2name",
+    "annotation_table",
 }
 
 

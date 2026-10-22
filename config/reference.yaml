@@ -170,6 +170,8 @@ STAR_index:
       rsem_index_dir: ziyushenshu_v1/RSEM_ziyushenshu_v1/                                      # RSEM INDEX PATH
       bed12: ziyushenshu_v1/ziyushenshu_v1.bed12                                               # GENE RANGES FOR GENE COVERAGE ANALYSIS
       go_annotation: ziyushenshu_v1/ziyushenshu_v1_go_annotation.tsv                           # GO TERM ANNOTATION (gene-level, from eggNOG)
+      annotation_table: /data/jzhang/project/Temp/Dioscorea_alata_26.10.9/Dioscorea_alata_26.10.9_006T2T/03.merge/eggnog_highconf.tsv
+      annotation_format: eggnog
       ref_all: ziyushenshu_v1/ziyushenshu_v1_ref_all.txt                                       # gene information
 
     GO:
@@ -207,6 +209,9 @@ deg_enrich_wrapper:
     gene_col: SYMBOL
   ziyushenshu_v1:
     gene_col: 'ENSEMBL'   # Column name for gene identifiers in deg result
+    kegg:
+      enabled: true
+      gene_col: 'ENSEMBL'
 
 ploidy_setting:
   Lsat_Salinas_v11:

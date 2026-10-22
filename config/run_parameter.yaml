@@ -107,6 +107,7 @@ parameter:
     PATH: ../src/src/Enrichments/go_enricher.r              # GO enrichment R script
     PATH_py: ../src/src/Enrichments/deg_enrich_wrapper.py   # Python wrapper script
     PATH_kegg: ../src/src/Enrichments/kegg_enricher.r       # Offline KEGG enrichment
+    PATH_annotation_converter: ../src/src/Enrichments/annotation_to_enrichment.py
     gene_regex: gene:/
 
   # RSEM Quality Control Parameters
