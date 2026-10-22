@@ -58,7 +58,7 @@ kegg$enrichKEGG <- function(...) terms
 input <- file.path(output, "deg.csv")
 write.csv(data.frame(GeneID = 1:20, padj = 0.001, log2FoldChange = rep(c(2, -2), each = 10)),
           input, row.names = FALSE)
-kegg$run_kegg_deg_table(input, out_dir = output, name = "fixture_KEGG")
+kegg$run_kegg_deg_table(input, out_dir = output, name = "fixture")
 for (direction in c("UP", "DOWN")) {
   prefix <- file.path(output, paste0("fixture_KEGG_", direction, "_enrichments"))
   check_images(prefix)
