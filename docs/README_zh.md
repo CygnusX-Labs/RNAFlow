@@ -243,9 +243,9 @@ RNAFlow/
 3. The pipeline uses conda environments for dependencies, which will be automatically created during execution.
 
 4. **(可选) 安装增强日志插件**：
-   如需彩色控制台输出与结构化日志，请安装 `snakemake_logger_plugin_rich_loguru` 0.1.6 或更高版本：
+   如需彩色控制台输出与结构化日志，请安装 `snakemake_logger_plugin_rich_loguru` 0.3.0 或更高版本：
    ```bash
-   pip install snakemake_logger_plugin_rich_loguru>=0.1.6
+   pip install snakemake_logger_plugin_rich_loguru>=0.3.0
    ```
    > [!NOTE]
    > **说明**：增强型日志插件可通过 PyPI 获取，执行流程时将自动安装。

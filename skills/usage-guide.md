@@ -11,7 +11,7 @@ This guide helps you use RNAFlow - a complete Snakemake-based RNA-seq analysis p
 conda install -c conda-forge -c bioconda snakemake mamba
 
 # Optional: Install enhanced logger plugin for monitoring
-pip install snakemake_logger_plugin_rich_loguru==0.1.4
+pip install snakemake_logger_plugin_rich_loguru>=0.3.0
 
 # Clone RNAFlow repository
 git clone --recurse-submodules git@github.com:xsx123123/RNAFlow.git

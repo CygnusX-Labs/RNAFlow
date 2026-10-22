@@ -14,20 +14,22 @@ RNAFlow is a fully automated RNA-seq analysis pipeline based on Snakemake. It im
 
 RNAFlow is developed on the [FlowFrame](https://github.com/xsx123123/FlowFrame) specification for multi-omics workflow development. FlowFrame standardizes the pipeline entrypoint, directory layout, configuration and schema validation, module dependency and target generation, data gating, resource management, and delivery/report interfaces. RNAFlow applies these conventions to RNA-seq, combining them with its transcriptome-specific toolchain and the external BioReport reporting system.
 
-## 📖 Table of Contents
-- [Built on FlowFrame](#-built-on-flowframe)
-- [Core Features](#-core-features)
-- [Analysis Workflow](#-analysis-workflow)
-- [System Architecture](#-system-architecture)
-- [Project Organization](#-project-organization-recommendations)
-- [Installation Guide](#-installation-guide)
-- [Container Image Builder](#-container-image-builder-new-in-v019)
-- [Reference Genome Builder](#-reference-genome-builder)
-- [AI Skills Usage Guide](#-ai-skills-usage-guide)
-- [Configuration Guide](#-configuration-guide)
-- [Usage Instructions](#-usage-instructions)
-- [Development Roadmap](docs/ROADMAP.md)
-- [Version History](#-version-history)
+## 📖 Documentation
+
+Detailed guides have been split out of this README:
+
+| Guide | Contents |
+|-------|----------|
+| [Installation](docs/installation.md) | Prerequisites, repository setup, Snakemake environment |
+| [Container Image Builder](docs/container_builder.md) | Build Docker images from Conda environments, batch build and push |
+| [Architecture & Project Layout](docs/architecture.md) | System architecture, data flow, recommended project directories, codebase map |
+| [Configuration](docs/configuration.md) | `config.yaml`, sample/contrast tables, module switches, internal and cluster configs |
+| [Usage & Analysis Modules](docs/usage.md) | Running the pipeline, per-module behavior, typical scenarios, report export |
+| [Reference Genome Builder](docs/reference_builder.md) | Build STAR/RSEM indexes and generate `reference.yaml` snippets |
+| [AI Skills](docs/ai_skills.md) | Install and use RNAFlow skills with Claude Code / Codex |
+| [MCP Server](docs/mcp_server.md) | Genome query, config generation, run management, remote deployment |
+| [Version History](docs/version_history.md) | Release notes for every RNAFlow version |
+| [Roadmap](docs/ROADMAP.md) | Planned analysis extensions and platform features |
 
 ## ✨ Core Features
 
@@ -63,829 +65,74 @@ RNAFlow covers the standard whole process of transcriptome analysis:
     *   **Assembly**: StringTie transcript assembly.
 6.  **Reporting & Delivery**: Automatically aggregates MultiQC, organizes the delivery directory, and hands results to the [BioReport](https://github.com/xsx123123/bioreport) component of the CygnusX BioOps ecosystem for HTML and PDF report generation.
 
-## 🏗️ System Architecture
+## 🚀 Quick Start
 
-```mermaid
-graph TD
-    %% =======================
-    %% 1. Configuration Layer
-    %% =======================
-    subgraph Config_Layer [Configuration Layer]
-        direction TB
-        Conf_Main[config.yaml]
-        Conf_Ref[reference.yaml]
-        Conf_Env[envs/*.yaml]
-        Input_Data[Raw FASTQ / Flat or Nested]
-    end
-
-    %% =======================
-    %% 2. Core Workflow Layer (Snakemake)
-    %% =======================
-    subgraph Workflow_Layer [Core Workflow - Snakemake]
-        direction TB
-        
-        %% Pre-processing
-        node_QC[QC & Cleaning]
-        node_Map[STAR Alignment]
-        
-        %% Quantification
-        node_Quant[RSEM Quantification]
-        
-        %% Advanced Analysis Modules
-        subgraph Modules [Analysis Modules]
-            direction LR
-            Mod_DEG[DEG & Enrichment]
-            Mod_Var[GATK Variants]
-            Mod_Spl[rMATS Splicing]
-            Mod_Fus[Fusion Detection]
-            Mod_Asm[StringTie Assembly]
-        end
-        
-        %% Data Aggregation
-        node_Agg[Merge & Stats]
-    end
-
-    %% =======================
-    %% 3. Reporting Layer (External BioReport)
-    %% =======================
-    subgraph Report_Layer [BioReport - CygnusX BioOps]
-        direction TB
-        Action_Export[Export project_summary.json]
-        Action_Render[Render Report]
-        Output_Site[HTML / PDF Report]
-    end
-
-    %% =======================
-    %% Relationships
-    %% =======================
-    
-    %% Config -> Workflow
-    Input_Data --> node_QC
-    Conf_Main --> Workflow_Layer
-    Conf_Ref --> node_Map
-    
-    %% Workflow Internal
-    node_QC --> node_Map
-    node_Map --> node_Quant
-    node_Map --> Modules
-    node_Quant --> Mod_DEG
-    Modules --> node_Agg
-    
-    %% Workflow -> Reporting
-    node_Agg -- "JSON / CSV / Plots" --> Action_Export
-    Action_Export --> Action_Render
-    Action_Render --> Output_Site
-
-    %% =======================
-    %% Styling
-    %% =======================
-    classDef config fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
-    classDef workflow fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
-    classDef report fill:#e0f2f1,stroke:#004d40,stroke-width:2px;
-
-    class Conf_Main,Conf_Ref,Conf_Env,Input_Data config;
-    class node_QC,node_Map,node_Quant,Mod_DEG,Mod_Var,Mod_Spl,Mod_Fus,Mod_Asm,node_Agg workflow;
-    class Action_Export,Action_Render,Output_Site report;
-```
-
-### 🔄 Core Data Flow Description
-1.  **Input Parsing**: `Snakemake` automatically reads `config.yaml` and identifies the input data structure.
-2.  **Core Computation**: Expression matrices are obtained through STAR + RSEM, and advanced analysis modules are triggered in parallel.
-3.  **Result Aggregation**: `15.deliver.smk` summarizes key results into the delivery directory.
-4.  **Report Export**: `project_summary.json`, result tables, and plots are exported for the external [BioReport](https://github.com/xsx123123/bioreport) system (CygnusX BioOps), which renders the final HTML/PDF report.
-
-## 📂 Project Organization Recommendations
-
-To achieve decoupling of code and data, the following three-level directory structure is recommended for organizing analysis projects:
-
-### 1. Top-level Project Directory
-The root of the project, separating raw data, analysis processes, and final delivery:
-```text
-Project_Root/
-├── 00.raw_data/             # Raw sequencer data (Read-only)
-├── 01.workflow/             # Analysis workspace (Where Snakemake runs)
-└── 02.data_deliver/         # Final result delivery directory (Automatically organized by the pipeline)
-```
-
-### 2. Analysis Working Directory (01.workflow)
-Contains configuration files and serves as the current working directory for Snakemake:
-```text
-01.workflow/
-├── config.yaml              # Project configuration (Specifies reference_path, etc.)
-├── samples.csv              # Sample information table
-├── contrasts.csv            # Differential analysis contrast table
-├── 01.qc/                   # Intermediate QC results
-├── 02.mapping/              # Intermediate alignment products (BAM, etc.)
-├── 03.count/                # Intermediate quantification results
-├── 07.AS/                   # Intermediate alternative splicing files
-├── logs/                    # Detailed execution logs
-└── benchmarks/              # Resource consumption statistics for each step
-```
-
-### 3. Result Delivery Directory (02.data_deliver)
-Upon completion, the pipeline automatically summarizes core results here for final delivery:
-```text
-02.data_deliver/
-├── 00_Raw_Data/             # Raw data summary
-├── 01_QC/                   # QC reports (MultiQC, etc.)
-├── 02_Mapping/              # Alignment statistical reports
-├── 03_Expression/           # Expression quantification matrices
-├── 05_DEG/                  # Differential expression analysis results
-├── 06_Enrichments/          # Functional enrichment analysis charts
-├── 07_AS/                   # Alternative splicing results
-├── Summary/                 # Overall project summary statistics
-├── Analysis_Report/         # Report output generated by external BioReport
-├── report_data/             # Data exported for BioReport
-└── delivery_manifest.json   # Delivery manifest and MD5 checksums
-```
-
-## 📂 Codebase Structure
-
-```text
-RNAFlow/
-├── snakefile                # Main Snakemake entry file
-├── config/                  # Configuration directory (Run parameters, reference genomes)
-├── rules/                   # Modular rule definitions (00-15)
-│   ├── 04.short_read_qc.smk # Quality control
-│   ├── 07.mapping.smk      # Mapping
-│   ├── 11.DEG_Enrichments.smk # Differential analysis and enrichment
-│   ├── 15.deliver.smk      # Result organization
-│   └── ...
-├── envs/                    # Conda environment definition files (YAML)
-├── container_env/           # 🆕 Container image builder (NEW in v0.1.9+)
-│   ├── build_image.py       # Automated container builder with Rich logging
-│   ├── images/              # Dockerfile templates
-│   └── logs/                # Build logs
-├── report/                  # BioReport submodule (CygnusX BioOps)
-│                            # https://github.com/xsx123123/bioreport
-├── skills/                  # AI Skills directory
-│   ├── SKILL.md            # AI assistant skill definitions
-│   ├── path_config.yaml    # Path configuration
-│   ├── start_rnaflow.sh    # Enhanced startup script
-│   ├── install_skills.sh   # General installation script
-│   ├── install_codex_skills.sh # Codex-specific installation script
-│   ├── examples/           # Configuration template examples
-│   └── README.md           # Skills documentation
-├── src/                     # Auxiliary script libraries (Python/R)
-│   ├── DEG/                 # Differential analysis scripts
-│   └── Enrichments/         # Enrichment analysis wrappers
-└── scripts/                 # Utility scripts
-```
-
-## 🚀 Installation Guide
-
-1.  **Clone the Repository**:
-    ```bash
-    git clone --recurse-submodules git@github.com:xsx123123/RNAFlow.git
-    cd RNAFlow
-    ```
-
-2.  **Environment Preparation**:
-    Install Snakemake and Mamba:
-    ```bash
-    conda install -c conda-forge -c bioconda snakemake mamba
-    ```
-
-3. The pipeline uses conda environments for dependencies, which will be automatically created during execution.
-
-4. **(Optional) Install Enhanced Logger Plugin**:
-   To enable colored console output and structured logging, install `snakemake_logger_plugin_rich_loguru` 0.1.6 or newer:
-   ```bash
-   pip install snakemake_logger_plugin_rich_loguru>=0.1.6
-   ```
-   > [!NOTE]
-   > **Note**: The enhanced logger plugin is available via PyPI and will be automatically installed with the pipeline.
-
-## 🐳 Container Image Builder (New in v0.1.9+)
-
-RNAFlow now provides an automated container image builder that converts Conda environments to Docker images, enabling better portability and reproducibility.
-
-### Quick Start
+### 1. Clone and install
 
 ```bash
-cd container_env
-
-# Build single environment
-python build_image.py -e ../envs/bwa2.yaml -t rnaflow-bwa:v2
-
-# Batch build all environments
-python build_image.py --batch ../envs/ --registry your-registry.io/
-
-# Build and push
-python build_image.py -e ../envs/fastqc.yaml -t rnaflow-fastqc:v2 --push --registry registry.io/
+git clone --recurse-submodules git@github.com:xsx123123/RNAFlow.git
+cd RNAFlow
+conda install -c conda-forge -c bioconda snakemake mamba
+pip install "snakemake_logger_plugin_rich_loguru>=0.3.0"
 ```
 
-### Features
+The analysis toolchains are managed by Conda environments defined under `envs/` and are created automatically on first run. See [Installation](docs/installation.md) for details.
 
-- ✅ **Rich Log Output**: Colorful terminal output with progress bars and tables
-- ✅ **Auto Environment Activation**: Built images automatically activate the Conda environment
-- ✅ **Health Checks**: Automatic verification of key tools in each image
-- ✅ **Batch Processing**: Build all environments in one command
-- ✅ **Detailed Logging**: All operations logged to `logs/` directory with JSON reports
+### 2. Configure the project
 
-### Usage in Snakemake
-
-```python
-rule bwa_index:
-    input:
-        ref="genome.fa"
-    output:
-        "genome.fa.bwt"
-    container:
-        "rnaflow-bwa:v2"  # Direct command execution, no activation needed
-    shell:
-        "bwa-mem2 index {input.ref}"
-```
-
-### Architecture Decision: Git Submodule for Multi-Pipeline Sharing
-
-> **Current Design**: `container_env/` is designed to be used as a **Git Submodule** for sharing across multiple omics pipelines (RNAFlow, ATACFlow, etc.).
-
-**Why Submodule:**
-- **Single Source of Truth**: Update builder logic once, sync to all pipelines
-- **Independent Versioning**: Container builder can evolve independently
-- **Reusability**: Share between RNAFlow, ATACFlow, and future pipelines
-- **Flexibility**: Each pipeline can pin to specific submodule version
-
-**Directory Structure with Submodules:**
-```
-YourOrg/
-├── rnaflow.git              # RNAFlow main repo
-│   ├── container_env/ ->    # submodule: container-builder.git
-│   └── envs/                # RNAFlow-specific envs
-├── atacflow.git             # ATACFlow main repo
-│   ├── container_env/ ->    # same submodule
-│   └── envs/                # ATACFlow-specific envs
-└── container-builder.git    # Shared builder submodule
-```
-
-**Setting up as Submodule:**
-```bash
-# Add to your pipeline repo
-git submodule add git@github.com:YourOrg/container-builder.git container_env
-git submodule update --init --recursive
-
-# Update to latest version
-git submodule update --remote container_env
-git add container_env && git commit -m "Update container builder"
-```
-
-**Pipeline-Specific Configuration:**
-Create `container_env/<pipeline>_config.yaml` to customize:
-```yaml
-# rnaflow_config.yaml
-pipeline_name: "RNAFlow"
-version: "0.2.0"
-registry_prefix: "rnaflow"
-default_envs:
-  - bwa2
-  - star
-  - deseq2
-```
-
-See `container_env/example_snakemake_integration.md` for detailed integration examples.
-
-## 🤖 AI Skills Usage Guide
-
-RNAFlow provides dedicated AI Skills, allowing you to interact with AI programming assistants like Claude Code and Codex via natural language to easily complete RNA-seq analysis.
-
-## 🔌 MCP Server Usage Guide
-
-RNAFlow also provides an MCP server based on the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), using **[uv](https://docs.astral.sh/uv/)** for modern environment management.
-
-### MCP Server Features
-
-- **Genome Query**: List reference genomes supported by the system (read from `mcp_genome_version` in `config/reference.yaml`).
-- **Configuration Generation**: Automatically generate `config.yaml`, `samples.csv`, and `contrasts.csv`.
-- **System Resource Monitoring**: Real-time check of CPU, memory, and disk usage, with warnings before task submission.
-- **Project Run Management**: Uses an SQLite database to record information for each run, supporting queries and statistics.
-- **Project Conflict Detection**: Checks for project name conflicts before starting tasks to avoid duplication.
-- **Asynchronous Execution**: Starts Snakemake in the background without blocking the AI.
-- **Detailed Logs**: All operations are recorded in the `mcp/logs/mcp/` directory, with timestamps and detailed execution information.
-- **Environment Isolation**: Uses `uv` to ensure that dependency libraries and analysis environments do not interfere with each other.
-- **Dual Mode Support**: Local stdio mode + remote deployment capability.
-
-### Prerequisites
-
-Before using the MCP Server, ensure the following are installed on the server:
-- Python 3.13+
-- **uv (Package Manager)** - Must be installed on the server first
-- conda/mamba (for running Snakemake)
-- Node.js (Optional, for MCP Inspector testing)
-
-### Install uv (if not installed)
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### Quick Start
-
-1. **Install MCP Dependencies**:
-```bash
-cd /home/zj/pipeline/RNAFlow/mcp
-uv sync
-```
-
-2. **Optional: Install System Resource Monitoring Dependencies (Recommended)**:
-```bash
-uv add psutil
-```
-
-3. **Test Run**:
-```bash
-./start.sh test
-```
-
-### Usage in AI Clients
-
-For detailed instructions and configuration methods, please refer to: `mcp/README.md`
-
-- Local Usage Configuration
-- Remote SSH Tunneling Configuration
-- Production Deployment Plan
-
-### 1. Install Skills
-> NOTE: Due to the decoupled architecture of the analysis pipeline and skills, please modify the paths in the `path_config.yaml` file to your actual paths before installing skills. For example: `RNAFLOW_ROOT`, `complete`, `standard_deg`, etc.
-
-RNAFlow Skills are located in the `skills/` directory and support automatic installation to Claude Code or Codex:
-
-```bash
-cd /home/zj/pipeline/RNAFlow/skills
-
-# Auto-detect and install (Recommended)
-./install_skills.sh
-
-# Install specifically for Claude Code
-./install_skills.sh
-
-# Install specifically for Codex
-./install_codex_skills.sh
-```
-
-### 2. Skills Content
-
-After installation, your AI assistant will gain the following capabilities:
-
-- **SKILL.md**: Complete RNAFlow usage instructions and workflow.
-- **path_config.yaml**: Automatically configures the RNAFlow installation path.
-- **start_rnaflow.sh**: Enhanced startup script, including:
-  - Conda environment auto-detection
-  - Snakemake availability verification
-  - User confirmation mechanism
-  - Complete analysis workflow
-
-### 3. Usage Example
-
-After successful installation, restart your AI assistant and interact via natural language:
-
-```
-"Help me set up an RNAFlow analysis project"
-"Run RNAFlow's QC-only mode to check data quality"
-"Use RNAFlow for differential gene expression analysis"
-"Help me configure RNAFlow and run a full analysis" 
-```
-
-Example AI command for analysis:
-"I have a batch of data in `/data/jzhang/project/Temp/rna_skills_analysis/00.raw_data`. Help me analyze it using RNAFlow skills. Use Lettuce v8 for the genome and perform only QC analysis. You can use the `activate_snakemake` `alias` command to activate the pre-configured Snakemake environment."
-
-### 4. Enhanced Startup Script Features
-
-`start_rnaflow.sh` provides a secure analysis startup process:
-
-```
-[1/5] Checking if conda is installed...
-[2/5] Checking conda environments...
-[3/5] Checking Snakemake in the environment...
-[4/5] Environment summary, waiting for user confirmation...
-[5/5] User confirmed activation of the environment...
-```
-
-### 5. Manual Installation (Alternative)
-
-If the automatic installation script is not applicable, you can install manually:
-
-**Claude Code**:
-```bash
-mkdir -p ~/.claude/skills/RNAFlow
-cp -r skills/* ~/.claude/skills/RNAFlow/
-chmod +x ~/.claude/skills/RNAFlow/start_rnaflow.sh
-```
-
-**Codex**:
-```bash
-mkdir -p ~/.codex/skills/RNAFlow
-cp -r skills/* ~/.codex/skills/RNAFlow/
-chmod +x ~/.codex/skills/RNAFlow/start_rnaflow.sh
-```
-
-### 6. More Information
-
-For detailed installation and usage instructions, please refer to:
-- `skills/INSTALL.md` - Complete installation guide
-- `skills/usage-guide.md` - Usage guide
-- `skills/README.md` - Skills documentation
-
-## 🧬 Reference Genome Builder
-
-RNAFlow provides an independent sub-workflow for building reference genome indexes under `build_reference/`. It is also exposed as an AI agent skill in `skills/SKILL_build_reference.md`. This design decouples index construction from the main analysis pipeline, enabling:
-
-- **Simplified Migration**: Build indexes once and migrate the entire reference directory to other servers.
-- **Custom Genomes**: Easily build indexes for any species using your own reference FASTA and annotation files.
-- **Auto-Generated Config**: Automatically produces a `reference.yaml` snippet ready to paste into the main pipeline config.
-
-For detailed usage, see `build_reference/README.md` and `skills/SKILL_build_reference.md`.
-
-### Directory Structure
-
-```
-build_reference/
-├── config/
-│   └── run_parameter.yaml     # Thread allocation and runtime parameters
-├── config.yaml                # Reference genome metadata and file paths
-├── envs/
-│   ├── rsem.yaml              # Conda env for RSEM/STAR index building
-│   └── ucsc_gff.yaml          # Conda env for UCSC annotation tools
-├── rules/
-│   ├── 00.copy_reference.smk  # Copy original ref files to workflow dir
-│   ├── 01.index.smk           # Build STAR + RSEM indexes
-│   ├── 02.annotation.smk      # Build bed12 and ref_all tables
-│   └── 03.build_yaml.smk      # Generate reference.yaml config snippet
-└── snakefile                  # Entry point
-```
-
-### Configuration (`build_reference/config.yaml`)
+Copy `examples/analysisyaml.example.yaml` and set at least the paths and module switches:
 
 ```yaml
-# Genome version for validation (must be in can_use_genome_version)
-Genome_Version: GRCm39
-
-# Supported genome versions list
-can_use_genome_version:
-  - GRCm39
-
-# DEG enrichment gene identifier column
-gene_col: 'ENSEMBL'
-
-# Genome ploidy for variant calling
-ploidy: 2
-
-Reference:
-  info:
-    name: GRCm39
-    prefix: GRCm39_RNAFlow_Index          # Index directory name
-    description: Mouse reference genome (GRCm39)
-    # Base directory for reference outputs. Must match the main pipeline's
-    # reference_path. The workflow creates a subdirectory named after 'name'.
-    workflow: /path/to/reference
-  data_dir:
-    fa: /path/to/GRCm39.genome.fa
-    gff: /path/to/gencode.vM38.annotation.gff3
-    gtf: /path/to/gencode.vM38.annotation.gtf
-    go: /path/to/mgigene_go_annotation.tsv
-```
-
-### Running the Builder
-
-```bash
-cd build_reference
-
-# Dry run check
-snakemake --use-conda --cores 40 --dry-run
-
-# Execute build
-snakemake --use-conda --cores 40
-```
-
-### Build Outputs
-
-`workflow` is the parent reference directory (e.g. `/home/user/reference/RNAFlow_reference`). The workflow creates a subdirectory named after `name` (e.g. `GRCm39/`) and places all outputs there:
-
-```
-/home/user/reference/RNAFlow_reference/GRCm39/
-├── GRCm39.genome.fa                    # Copied from data_dir
-├── gencode.vM38.annotation.gtf         # Copied from data_dir
-├── gencode.vM38.annotation.gff3        # Copied from data_dir
-├── mgigene_go_annotation.tsv           # Copied from data_dir
-├── GRCm39_RNAFlow_Index/               # STAR + RSEM indexes
-│   ├── Genome
-│   ├── GRCm39_RNAFlow_Index.transcripts.fa
-│   └── GRCm39_RNAFlow_Index.idx.fa
-├── GRCm39_RNAFlow_Index.bed12
-├── GRCm39_RNAFlow_Index_ref_all.txt
-└── GRCm39_RNAFlow_Index_reference.yaml  # Ready to paste into config/reference.yaml
-```
-
-### Integrating into the Main Pipeline
-
-1. Ensure `workflow` in `build_reference/config.yaml` matches `reference_path` in `config/reference.yaml`.
-2. Open `GRCm39_RNAFlow_Index_reference.yaml` and paste each section into the corresponding area of `config/reference.yaml`.
-3. Set `Genome_Version: GRCm39` in your project's `config.yaml`.
-4. **(If schema validation is enabled)** Add the new genome version to `schema/config.schema.yaml`:
-   - Append the version name to `Genome_Version.enum` (e.g., `"GRCm39"`).
-   - Add a corresponding entry under `parameter.star_index.properties` (optional, as `additionalProperties: true` allows extra keys).
-
-## ⚙️ Configuration Guide
-
-It is recommended to use external YAML configuration files to manage project parameters, achieving decoupling between code and configuration.
-
-### Configuration Naming Convention
-
-Starting from RNAFlow v0.1.9+, all configuration items uniformly use the **snake_case** (lowercase letters + underscores) naming convention to ensure consistency and readability.
-
-| Old Config Name (Deprecated) | New Config Name (Recommended) | Description |
-|----------------|---------------|------|
-| `noval_Transcripts` | `detect_novel_transcripts` | Whether to detect novel transcripts |
-
-**Core Configuration Naming Convention:**
-```yaml
-# Basic Switches (all snake_case)
-only_qc: true                       # Run QC only
-deliver: true                       # Generate delivery manifests
-project_summary: true               # Export project JSON for external BioReport
-deg: true                           # Differential expression analysis
-fastq_screen: true                  # FastQ Screen contamination check
-call_variant: true                 # Variant calling
-detect_novel_transcripts: true      # Novel transcript detection [Old: noval_Transcripts]
-rmats: true                         # Alternative splicing analysis
-```
-
-**Notes:**
-1. All configuration items use lowercase letters connected by underscores `_`.
-2. Boolean configurations default to `false` (except for some core modules).
-3. Configuration names should be consistent with the full English name or common abbreviation of the corresponding analysis module.
-
-### 1. Project Configuration Example
-
-Copy `examples/analysisyaml.example.yaml` into the project workflow directory and
-replace all placeholder paths. The repository root no longer stores a machine-specific
-project `config.yaml`.
-
-```yaml
-project_name: 'PRJNA1224991'   # Project ID
-Genome_Version: "Lsat_Salinas_v11" # Genome version (Supports: Lsat_Salinas_v8, Lsat_Salinas_v11, ITAG4.1, GRCm39, etc.)
-species: 'Lsat Salinas'        # Species for analysis
-client: 'Internal_Test'        # Client ID
-
-# Raw data paths (Supports lists, can include multiple directories)
-raw_data_path:
-  - /path/to/raw_data
-
-# Key information tables
-sample_csv: /path/to/samples.csv    # Sample information table (format below)
-paired_csv: /path/to/contrasts.csv  # Sample pairing/contrast info table (format below)
-
-# Path settings
-workflow: /path/to/analysis_dir     # Data analysis process directory (Workspace)
-data_deliver: /path/to/deliver_dir  # Final result delivery directory
-
-# Run parameters
-execution_mode: local               # Run mode: local or cluster
-# queue_id: fat_x86                 # Cluster queue name (Only valid in cluster mode), remove if not running on a cluster
-
-# Sequencing library settings
-Library_Types: fr-firststrand       # Strand-specificity type (fr-unstranded, fr-firststrand, fr-secondstrand)
-                                    # The pipeline will automatically detect and compare settings; warnings will be issued if mismatched.
-
-# Advanced analysis switches (All module switches use snake_case)
-# Note: These are Boolean switches controlling the execution of each module.
-# - true: Execute the module
-# - false: Skip the module
-call_variant: true                  # Whether to perform variant calling (GATK)
-detect_novel_transcripts: true      # Whether to perform novel transcript assembly (StringTie) [Old: noval_Transcripts]
-rmats: true                         # Whether to perform alternative splicing analysis (rMATS)
-deg: true                           # Whether to perform differential expression analysis (DESeq2)
-fastq_screen: true                  # Whether to perform contamination check (FastQ Screen)
-deliver: true                       # Whether to organize deliverables and create manifests
-project_summary: true               # Export project JSON for external BioReport
-
-# Optional Configuration
-only_qc: true                       # Run mode: qc_only (Only QC), if true skips all downstream analysis
-```
-
-### 2. Sample Information Table (sample_csv)
-CSV format, containing three columns: `sample` (raw file name keyword), `sample_name` (renamed name), and `group` (grouping):
-```csv
-sample,sample_name,group
-L1MKL2302060-CKX2_23_15_1,CKX2_1,CKX2
-L1MKL2302061-CKX2_23_15_2,CKX2_2,CKX2
-L1MKL2302062-CKX2_23_15_3,CKX2_3,CKX2
-L1MKL2302063-Wo408_1,Wo408_1,Wo408
-L1MKL2302064-Wo408_2,Wo408_2,Wo408
-L1MKL2302065-Wo408_3,Wo408_3,Wo408
-```
-
-### 3. Sample Pairing Information Table (paired_csv)
-Used for contrast settings in differential analysis (DEG), containing `Control` and `Treat` columns:
-```csv
-Control,Treat
-Wo408,CKX2
-```
-
-### 4. Core Pipeline Configurations (Internal Configs)
-Besides project-specific configs, the `config/` directory contains default settings:
-- **`config/config.yaml`**: Basic global configurations of the pipeline.
-- **`config/reference.yaml`**: Core reference genome configurations. Defines FASTA, GTF, and index paths for various versions (V8, V11, GRCm39, etc.).
-  - **Pipeline Migration**: If running in a different environment, modify `reference_path` (e.g., `reference_path: /data/jzhang/reference/RNAFlow_reference`).
-  - **Adding Genomes**: To support new species, add configurations in this file following the format.
-  - **Automatic Check**: The pipeline automatically checks reference file integrity upon startup to ensure reliable analysis.
-  - **FastQ Screen Database**: Added `fastq_screen_db_path`, pointing to the root directory of the contamination source database (must include subdirectories like hg38, GRCm39, fastq_screen_database). For migration, simply copy the directory and update the path in the configuration.
-- **`config/run_parameter.yaml`**: Tool execution parameter settings, including specific command-line parameters for various software (e.g., STAR alignment thresholds, RSEM model parameters).
-  - **STAR Parameter Details**:
-    - `--peOverlapNbasesMin 0` (Default): PE Overlap merging disabled (default behavior).
-    - `--peOverlapMMp 0.1` (Current) vs `0.01` (Default): Merging mismatch tolerance relaxed.
-    - `--twopassMode Basic` (Current) vs `None` (Default): Two-pass mapping enabled.
-    - `--outFilterMismatchNoverLmax 0.04` (Current) vs `0.3` (Default): Mismatch filtering strengthened.
-    - `--alignMatesGapMax 1000000` (Current) vs `0` (Default): Cross-intron long gap alignment enabled.
-    - `--chimSegmentMin 12` (Current) vs `0` (Default): Chimeric/fusion gene detection enabled.
-    - `--quantMode TranscriptomeSAM` (Current) vs `None` (Default): Transcriptome quantification output enabled.
-- **`config/cluster_config.yaml`**: Cluster resource definitions, specifying thread and memory allocations for different tasks (Low, Medium, High resource).
-
-### 5. Cluster Configuration (Optional)
-If `execution_mode` is set to `cluster`, install the executor plugin for your scheduler, e.g. `snakemake-executor-plugin-slurm` for Slurm or `snakemake_executor_donau` for Huawei Donau. Finer resource allocation (threads, memory) can be edited in `config/cluster_config.yaml`.
-
-## 💻 Usage Instructions
-
-### Standard Analysis Workflow
-
-RNAFlow manages project parameters through external YAML configuration files, achieving decoupling between code and configuration.
-
-#### 1. Configuration Preparation
-
-Copy `examples/analysisyaml.example.yaml`, then configure project paths and module switches:
-
-```yaml
-# === Basic Project Info ===
 project_name: 'PRJNA1224991'
 Genome_Version: "Lsat_Salinas_v11"
-species: 'Lsat Salinas'
-client: 'Internal_Test'
-
-# === Data Paths ===
 raw_data_path:
   - /path/to/raw_data
 sample_csv: /path/to/samples.csv
 paired_csv: /path/to/contrasts.csv
 workflow: /path/to/analysis_dir
 data_deliver: /path/to/deliver_dir
-
-# === Run Parameters ===
 execution_mode: local
 Library_Types: fr-firststrand
-
-# === Analysis Module Switches (all snake_case) ===
-only_qc: false              # Run QC only (skips all downstream analysis if true)
-deg: true                   # Differential expression analysis
-call_variant: true        # Variant calling
-detect_novel_transcripts: true  # Novel transcript detection (formerly noval_Transcripts)
-rmats: true                 # Alternative splicing analysis
-fastq_screen: true          # Contamination check
-deliver: true               # Generate delivery manifests
-project_summary: true       # Export project JSON for external BioReport
+only_qc: false
+deg: true
 ```
 
-#### 2. Running the Analysis Pipeline
+The full option reference, sample table formats, and cluster settings are in [Configuration](docs/configuration.md).
+
+### 3. Run
 
 ```bash
-# 1) Dry Run check
-snakemake -n \
-    --config analysisyaml=/path/to/your_config.yaml
+# Dry run
+snakemake -n --config analysisyaml=/path/to/your_config.yaml
 
-# 2) Execute analysis (Recommended parameters)
-snakemake \
-    --cores=60 \                           # Use 60 cores
-    -p \                                   # Print shell commands
-    --conda-frontend=mamba \              # Use mamba to manage conda environments
-    --use-conda \                          # Automatically create/use conda environments
-    --rerun-triggers mtime \              # Rerun based on modification time
-    --logger rich-loguru \                # Use rich-loguru for colored logs
+# Full run
+snakemake --cores 60 -p \
+    --use-conda --conda-frontend mamba \
+    --rerun-triggers mtime \
+    --logger rich-loguru \
     --config analysisyaml=/path/to/your_config.yaml
 ```
 
-#### 3. Configuration Item Description
+Module behavior and typical analysis scenarios are described in [Usage & Analysis Modules](docs/usage.md).
 
-| Config Item | Type | Default | Description |
-|-------|------|-------|------|
-| `only_qc` | bool | false | QC only mode, skips downstream analysis like DEG, variant calling, etc. if true. |
-| `deg` | bool | true | Differential expression analysis (DESeq2) |
-| `call_variant` | bool | false | Variant calling (GATK) |
-| `detect_novel_transcripts` | bool | false | Novel transcript detection (StringTie), formerly `noval_Transcripts` |
-| `rmats` | bool | true | Alternative splicing analysis (rMATS) |
-| `fastq_screen` | bool | true | Contamination check (FastQ Screen) |
-| `deliver` | bool | true | Organize outputs and generate delivery manifests |
-| `project_summary` | bool | true | Export the versioned project JSON consumed by external BioReport |
+## 📂 Repository at a Glance
 
----
-
-### Detailed Post-Configuration Analysis Content
-
-Based on the settings in `config.yaml`, RNAFlow automatically decides which modules to run. Here are details for when items are enabled/disabled:
-
-#### 📊 Basic Analysis (Always Runs)
-In standard mode, mapping and quantification are enabled by default and can be pulled
-in automatically as dependencies. In `only_qc` mode, only the MD5 gate, raw-read QC,
-trimming, and merged QC reports are targeted.
-
-| Step | Tool | Output Content |
-|------|------|---------|
-| **MD5 Check** | md5sum | Raw data integrity verification report |
-| **Quality Control (QC)** | FastQC, fastp | Sequencing data quality reports, filtered clean data |
-| **Mapping** | STAR | Aligned BAM files, mapping statistics, Qualimap report |
-| **Quantification (Count)** | RSEM | Gene/transcript expression levels (TPM/FPKM/Counts) |
-| **CRAM Compression** | samtools | Compressed storage in CRAM format |
-
-#### 🎛️ Optional Analysis Modules (Configuration Controlled)
-
-##### 1️⃣ `only_qc: true` (QC Only Mode)
-- **Effect**: Runs only MD5 validation, raw FastQC, trimming, and merged QC reports.
-- **Use Case**: Data screening, rapid quality assessment.
-- **Skipped Content**: DEG, variant calling, alternative splicing, novel transcripts, etc.
-
-##### 2️⃣ `fastq_screen: true` (Contamination Check)
-- **Tool**: FastQ Screen
-- **Output**:
-  - Contamination screening reports for R1/R2 of each sample.
-  - MultiQC summary report.
-- **Purpose**: Detects if samples are contaminated with exogenous species.
-
-##### 3️⃣ `deg: true` (Differential Expression Analysis)
-- **Tool**: DESeq2
-- **Output**:
-  - Differential gene lists for each contrast group (Excel/CSV).
-  - Visualizations like volcano plots, MA plots, heatmaps, etc.
-  - Gene expression distribution plots.
-- **Dependency**: Requires correct setup of the `paired_csv` contrast table.
-
-##### 4️⃣ `call_variant: true` (Variant Calling)
-- **Tool**: GATK HaplotypeCaller
-- **Output**:
-  - Variant VCF files for each sample.
-  - bcftools statistical reports.
-  - MultiQC summary.
-- **Application**: SNP/Indel detection in RNA-seq data.
-
-##### 5️⃣ `detect_novel_transcripts: true` (Novel Transcript Detection)
-- **Tool**: StringTie
-- **Output**:
-  - Novel transcript GTF files.
-  - Filtered lists of new isoforms.
-- **Old Config Name**: `noval_Transcripts` (Deprecated).
-
-##### 6️⃣ `rmats: true` (Alternative Splicing Analysis)
-- **Tool**: rMATS
-- **Output**:
-  - MATS results for 5 types of splicing events (SE, MXE, etc.).
-  - Summary statistical reports.
-  - Single sample and paired contrast results.
-- **Additional**: Includes junction_annotation and CIRCexplorer2 (circRNA) analysis.
-
-##### 7️⃣ `project_summary: true` (Report Data Export)
-- **Output**:
-  - `project_summary.json` with separate GO/KEGG results.
-- **Purpose**: Provides the versioned JSON contract consumed by the external [BioReport](https://github.com/xsx123123/bioreport) system for HTML/PDF report generation.
-- **Interface**: See [the JSON contract](docs/project_summary_json.md).
-
-##### 8️⃣ `gene_fusion: true` (Gene Fusion Detection)
-- **Tool**: Arriba
-- **Output**:
-  - Fusion gene TSV results for each sample (`{sample}_fusions.tsv`).
-  - Discarded fusion results (`{sample}_fusions.discarded.tsv`).
-  - Optional PDF visualization reports.
-- **Application**: Detects inter-chromosomal fusion events, common in cancer research.
-
----
-
-#### 📋 Typical Configuration Scenarios
-
-**Scenario 1: Full Analysis (Recommended Default)**
-```yaml
-only_qc: false
-deg: true
-call_variant: true
-detect_novel_transcripts: true
-rmats: true
-fastq_screen: true
-project_summary: true  # Export JSON for external BioReport
+```text
+RNAFlow/
+├── snakefile                # Main Snakemake entry file
+├── config/                  # Global, reference, parameter, and cluster configs
+├── rules/                   # Modular rule definitions (01-14)
+├── envs/                    # Conda environment definitions
+├── src/                     # Auxiliary Python/R script libraries (submodule)
+├── report/                  # BioReport submodule
+├── skills/                  # AI Skills
+├── mcp/                     # MCP server
+├── container_env/           # Container image builder (submodule)
+├── build_reference/         # Reference genome index builder
+└── docs/                    # Documentation
 ```
 
-**Scenario 2: Rapid QC Screening**
-```yaml
-only_qc: true  # Runs only QC and mapping
-```
-
-**Scenario 3: Standard Analysis Only (Skips Time-Consuming Modules)**
-```yaml
-only_qc: false
-deg: true
-call_variant: false      # Skips variant calling
-detect_novel_transcripts: false  # Skips novel transcripts
-rmats: false             # Skips alternative splicing
-project_summary: true    # Export JSON for external BioReport
-```
-
-### Report Generation (External BioReport)
-
-When `project_summary: true` is enabled, RNAFlow exports `project_summary.json` together with result tables and plots. The report itself is generated by [BioReport](https://github.com/xsx123123/bioreport), a separate repository in the CygnusX BioOps ecosystem that renders HTML and PDF deliverables. The interface between the pipeline and the reporting repository is documented in the [JSON contract](docs/project_summary_json.md).
+See [Architecture & Project Layout](docs/architecture.md) for the full system diagram and recommended data directories.
 
 ## 📌 Versioning Strategy
 
@@ -904,79 +151,13 @@ RNAFlow adopts a **multi-component independent versioning** strategy. Each major
 
 Planned analysis extensions, LncRNA and cloud-native reference management, advanced experimental design, and AI engine enhancements are tracked in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## 📈 Version History
+## 📈 Latest Release
 
 ### RNAFlow_v0.2.0 (2026-10-20)
 - **Version**: Updated the Pipeline version from v0.1.9 to v0.2.0 in the default configuration, report module manifest, workflow headers, and example configurations.
 - **Documentation**: Synchronized current-version references and clarified that roadmap features remain planned work. MCP Server and Deliver Tool retain their independent versions.
 
-### RNAFlow_v0.1.9
-- **Feature**: Added `container_env/` - Automated Docker image builder for Conda environments.
-    - Converts `envs/*.yaml` to production-ready Docker images
-    - Rich-loguru powered beautiful CLI output
-    - Batch build and auto-push capabilities
-    - Auto-activation environment in containers
-- **Optimization**: Fixed potential bugs in `call variant`, `enrichments`, and `report` modules.
-- **Optimization**: Optimized `reference.yaml` and added `deg_enrich_wrapper` and `ploidy_setting` configs.
-- **Debug**: Fixed missing `ref_all` config for `Lsat_Salinas_v8` reference.
-- **Optimization**: Reverted `STAR` parameters to defaults.
-- **Debug**: Fixed version inconsistency in `snakefile` (v0.1.7 -> v0.1.9).
-- **Critical Debug**: Fixed spelling error in STAR index file " Genome" in `judge_star_index` function (extra space).
-- **Debug**: Fixed issue in `01.common.smk` where config parameters were not passed during mapping function calls.
-- **Optimization**: Updated `config.schema.yaml`, adding hg38 to the Genome_Version enum list.
-- **Optimization**: Improved `config.schema.yaml` verification, adding missing config items like loki_url, only_qc, bam_remove, etc.
-- **Optimization**: Added missing `ref_all` fields for `TAIR10.1` and `hg38` reference genomes.
-- **Cleanup**: Removed duplicate `fastq-screen.yaml` in the `envs/` directory.
-
-### RNAFlow_v0.1.8
-- **Feature**: Deprecated the old Seq log monitoring, updated to Loki + Grafana.
-- **Feature**: Added `loki_url` config for Loki server address.
-- **Feature**: Updated `snakemake_logger_plugin_rich_loguru` to 0.1.4 for Loki log pushing.
-- **Documentation**: Added Grafana monitoring example screenshot (see `docs/grafana.png`).
-- **Feature**: Added `compress_bg` module for compressing STAR `coverage` files.
-
-### RNAFlow_v0.1.7
-- **Feature**: Added `estimate_library_complexity` rule.
-- **Feature**: Added `rmats_summary` for merging AS results from paired and single samples.
-- **Improvement**: Used `temp()` to mark intermediate BAMs for removal; added `bam2cram` rule to reduce storage overhead.
-- **Feature**: Added `CIRCexplorer2_run` for circRNA detection.
-- **Feature**: Added `geneBody_coverage` for library coverage assessment.
-- **Feature**: Added `read_distribution` for library read distribution detection.
-- **Feature**: Integrated customized plugin `snakemake_logger_plugin_rich_loguru` with `seq` for workflow monitoring.
-
-### RNAFlow_v0.1.6
-- **Feature**: Modular refactoring of `DataDeliver` function.
-- **Feature**: Enhanced configuration verification mechanisms.
-- **Improvement**: Optimized AI report generation workflow, supporting more formats.
-- **Feature**: Deep integration of **BioReport v2** system.
-- **Feature**: Added rules `14.Merge_qc` and `15.deliver` for automated result organization.
-- **Feature**: Added **Execution Mode** switch (`run_mode: qc_only`).
-- **Improvement**: Updated `11.DEG_Enrichments` to integrate enrichment logic.
-- **Optimization**: Refined flow control and fault tolerance for the AI engine.
-
-### RNAFlow_v0.1.5 (2026-01-11)
-- **New Feature**: Smart input data identification.
-- **Improvement**: Enhanced CLI experience via `rich-loguru`.
-- **Documentation**: Updated directory structure and usage examples.
-
-### RNAFlow_v0.1.4 (2026-01-07)
-- Added rMATS, gene fusion, enrichment analysis.
-- Added support for GRCm39 reference.
-- Fixed rMATS rules and workflow source path issues.
-
-### RNAFlow_v0.1.3 (2026-01-03)
-- Added DEG, merged RSEM, StringTie, GATK modules.
-- Various bug fixes and improvements.
-
-### RNAFlow_v0.1.2 (2025-12-25)
-- Fixed mapping module errors.
-
-### RNAFlow_v0.1.1 (2025-12-24)
-- Added RSEM quantification module.
-
-### RNAFlow_v0.1 (2025-12-24)
-- Initial release.
-- Basic RNA-seq analysis workflow (QC, mapping, quantification).
+Full release notes are available in [Version History](docs/version_history.md).
 
 ---
 **Author**: JZHANG | **Version**: RNAFlow_v0.2.0

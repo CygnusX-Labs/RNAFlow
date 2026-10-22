@@ -396,7 +396,7 @@ loki_url: "http://your-loki-server:3100"
 
 ```bash
 # Install logger plugin
-pip install snakemake_logger_plugin_rich_loguru==0.1.4
+pip install snakemake_logger_plugin_rich_loguru>=0.3.0
 
 # Run with monitoring
 snakemake \
