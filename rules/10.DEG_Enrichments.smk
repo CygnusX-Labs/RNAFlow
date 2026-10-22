@@ -217,19 +217,23 @@ rule DEG:
         samples = config['sample_csv'],
         paired = config.get('paired_csv', ''),
         PATH = workflow.source_path(config['parameter']['DEG']['PATH']),
+        wrapper = workflow.source_path(config['parameter']['DEG'].get('PATH_py', '../src/src/DEG/run_deg_parallel.py')),
+        worker_logs = "logs/06.DEG/contrasts",
         LFC = config['parameter']['DEG']['LFC'],
         PVAL = config['parameter']['DEG']['PVAL'],
     threads:
-        1
+        config['parameter'].get('threads', {}).get('DEG', 4)
     shell:
         """
-        chmod +x {params.PATH} && \
-        Rscript {params.PATH} -c {input.counts} \
-                -m {params.samples} \
-                -p {params.paired} \
-                -o {output.deg_dir} \
+        python {params.wrapper:q} --rscript {params.PATH:q} \
+                -c {input.counts:q} \
+                -m {params.samples:q} \
+                -p {params.paired:q} \
+                -o {output.deg_dir:q} \
+                --threads {threads} \
+                --log-dir {params.worker_logs:q} \
                 --lfc={params.LFC} \
-                --pval={params.PVAL} &> {log}
+                --pval={params.PVAL} > {log:q} 2>&1
         """
 
 rule Enrichments:
@@ -283,6 +287,9 @@ rule Enrichments:
         lfc_th = config['parameter']['DEG']['LFC'],
         kegg_rscript = workflow.source_path(config['parameter']['Enrichments'].get('PATH_kegg', '../src/src/Enrichments/kegg_enricher.r')),
         kegg_config = json.dumps(config['deg_enrich_wrapper'][config['Genome_Version']].get('kegg', {})),
+        worker_logs = "logs/07.Enrichments/contrasts",
+    threads:
+        config['parameter'].get('threads', {}).get('Enrichments', 4)
     shell:
         """
         rm -rf {output.Enrichments_dir:q}
@@ -299,6 +306,8 @@ rule Enrichments:
             --gene_regex '{params.gene_regex}' \
             --kegg_config {output.Enrichments_dir:q}/kegg_config.json \
             --kegg_rscript {params.kegg_rscript:q} \
+            --threads {threads} \
+            --log-dir {params.worker_logs:q} \
             --padj_th {params.padj_th} --lfc_th {params.lfc_th} \
             --cutoff {params.cutoff} > {log} 2>&1
         """
