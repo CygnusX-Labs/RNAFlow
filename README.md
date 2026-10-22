@@ -981,7 +981,8 @@ Planned analysis extensions, LncRNA and cloud-native reference management, advan
 ---
 **Author**: JZHANG | **Version**: RNAFlow_v0.2.0
 
-## 🔗 Links
-- GitHub: [repository](https://github.com/xsx123123/RNAFlow)
-- BioReport: [bioreport](https://github.com/xsx123123/bioreport) (CygnusX BioOps)
-- LINUX DO: [Announcement](https://linux.do/) (Original)
+---
+
+<p align="center">
+  <img src="docs/Slogo.png" alt="CygnusX research ecosystem" width="1100">
+</p>
